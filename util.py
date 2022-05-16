@@ -181,7 +181,10 @@ class TetrahedralElement:
         self.edges = edges
         self.permittivity = permittivity
         # Store the unique set of points that make up this tetrahedron in no particular order
-        self.points = TriangleElement.all_nodes[np.unique([edge.node1 for edge in [TriangleElement.all_edges[i] for i in edges]] + [edge.node2 for edge in [TriangleElement.all_edges[i] for i in edges]])]
+        self.nodes = np.unique(np.array([edge.node1 for edge in [TriangleElement.all_edges[i] for i in edges]] + [edge.node2 for edge in [TriangleElement.all_edges[i] for i in edges]], dtype=np.int32))
+        # Old tested method of getting the points for this tetrahedron
+        # self.points = TriangleElement.all_nodes[np.unique([edge.node1 for edge in [TriangleElement.all_edges[i] for i in edges]] + [edge.node2 for edge in [TriangleElement.all_edges[i] for i in edges]])]
+        self.points = TriangleElement.all_nodes[self.nodes]
         # print("Filler")
 
     def volume(self):
@@ -310,9 +313,11 @@ def load_mesh(filename):
     boundary_output_edge_numbers = set(all_edges_map[edge] for edge in boundary_output_edges)
 
     # Get the set of non-boundary global edge numbers
-    inner_edge_numbers = set(np.arange(0, len(all_edges))) - boundary_pec_edge_numbers - boundary_input_edge_numbers - boundary_output_edge_numbers
-    # A map that takes one of the inner edge numbers and maps it to a unique integer between [0, number of inner edges]
-    remap_inner_edge_nums = {item: i for i, item in enumerate(inner_edge_numbers)}
+    # inner_edge_numbers = set(np.arange(0, len(all_edges))) - boundary_pec_edge_numbers - boundary_input_edge_numbers - boundary_output_edge_numbers
+    # Different version of above:
+    edge_nums = set(np.arange(0, len(all_edges))) - boundary_pec_edge_numbers
+    # A map that takes one of the non-PEC edge numbers and maps it to a unique integer between [0, num of non-PEC edges]
+    remap_edge_nums = {item: i for i, item in enumerate(edge_nums)}
 
     # Return the results of loading the mesh
     # all_tets: A list of all the TetrahedralElement objects that make up the entire geometry
@@ -322,7 +327,7 @@ def load_mesh(filename):
     # boundary_output_edge_numbers: A set of all the global edge numbers that lie on the OutputPort wall of the geometry
     # remap_inner_edge_nums: A map that takes one of the inner edge numbers and maps it to a unique integer between [0, number of inner edges]
     # all_edges_map: A map from an Edge object to its global edge number
-    return all_tets, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_inner_edge_nums, all_edges_map
+    return all_nodes, all_tets, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map
 
 
 def area(x1, y1, x2, y2, x3, y3):
