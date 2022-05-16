@@ -84,7 +84,7 @@ for tet in tetrahedrons:
                 Czk = a_ik[2] * a_jk[3] - a_ik[3] * a_jk[2]
 
                 # Compute the curl(N_i) \dot curl(N_j) part of K_ij
-                curl_dot_curl_part = edge1.length*edge2.length / 324 / tet.volume()**3 * (Czl*Czk + Cxl*Cxk + Byl*Byk)
+                curl_dot_curl_part = edge1.length*edge2.length / 324 / tet.volume**3 * (Czl*Czk + Cxl*Cxk + Byl*Byk)
 
                 # Build constants for N_i \dot N_j part of K_ij
                 # These constants come from NASA paper eq. 182
@@ -100,5 +100,5 @@ for tet in tetrahedrons:
                 I9 = 1/20 * (Bxl*Bxk + Czl*Czk) * (sum(yi*yi for xi, yi, zi in tet.points) + 16*y_mean*y_mean)
                 I10 = 1/20 * (Cxl*Cxk + Cyl*Cyk) * (sum(zi*zi for xi, yi, zi in tet.points) + 16*z_mean*z_mean)
                 i_sum = I1 + I2 + I3 + I4 + I5 + I6 + I7 + I8 + I9 + I10
-                dot_part = tet.permittivity * edge1.length * edge2.length / 1296 / tet.volume()**3 * i_sum
+                dot_part = tet.permittivity * edge1.length * edge2.length / 1296 / tet.volume**3 * i_sum
 

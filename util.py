@@ -185,20 +185,13 @@ class TetrahedralElement:
         # Old tested method of getting the points for this tetrahedron
         # self.points = TriangleElement.all_nodes[np.unique([edge.node1 for edge in [TriangleElement.all_edges[i] for i in edges]] + [edge.node2 for edge in [TriangleElement.all_edges[i] for i in edges]])]
         self.points = TriangleElement.all_nodes[self.nodes]
-        # print("Filler")
-
-    def volume(self):
-        """
-        Compute and return the volume of this tetrahedral element
-        :return: The volume of this tetrahedral element
-        """
-        # TODO: Consider just making this a field of the class
         # Volume calculated using eq (157) in NASA paper
         mat = [[1, self.points[0][0], self.points[0][1], self.points[0][2]],
                [1, self.points[1][0], self.points[1][1], self.points[1][2]],
                [1, self.points[2][0], self.points[2][1], self.points[2][2]],
                [1, self.points[3][0], self.points[3][1], self.points[3][2]]]
-        return abs(np.linalg.det(mat) / 6)
+        # This could be a method, but is frequently and always used.
+        self.volume = abs(np.linalg.det(mat) / 6)
 
 
 def load_mesh_block(filename, block_name):
