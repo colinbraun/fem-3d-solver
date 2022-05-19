@@ -1,13 +1,16 @@
-from util import load_mesh_block
-from util import load_mesh
+from util import load_mesh, Edge
 import numpy as np
+from iwaveguide.waveguide import Waveguide
 
 # print(load_mesh_block("rectangular_waveguide_3d.inp", "ALLNODES"))
 # print(load_mesh_block("rectangular_waveguide_3d.inp", "InputPort"))
 all_nodes, tetrahedrons, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles = load_mesh("rectangular_waveguide_3d.inp")
 # Initialize the K and b matrices
-K = np.zeros([len(remap_edge_nums), len(remap_edge_nums)])
-b = np.zeros([len(remap_edge_nums)])
+K = np.zeros([len(remap_edge_nums), len(remap_edge_nums)], dtype=complex)
+b = np.zeros([len(remap_edge_nums)], dtype=complex)
+
+# TODO: Get the proper beta value from the inhomogeneous waveguide code
+beta = 1
 
 # Iterate over the tetrahedrons and construct the K and b matrices (this concept comes from Jin page 454)
 for tet in tetrahedrons:
@@ -105,3 +108,66 @@ for tet in tetrahedrons:
                 i_sum = I1 + I2 + I3 + I4 + I5 + I6 + I7 + I8 + I9 + I10
                 dot_part = tet.permittivity * edge1.length * edge2.length / 1296 / tet.volume**3 * i_sum
 
+# Get a Waveguide object
+waveguide_2d = Waveguide("iwaveguide/rect_mesh_two_epsilons_coarse.inp")
+
+# Iterate over the input port TriangleElement objects
+for element in boundary_input_triangles:
+    nodes = element.nodes
+    area = element.area()
+    # Iterate over the 3 edges of the element
+    for l, k in ((0, 1), (1, 2), (2, 0)):
+        # The first edge whose basis vector will be integrated against another edge (edge2)
+        edge1 = Edge(nodes[l], nodes[k])
+        # Skip edges on the boundary
+        if all_edges_map[edge1] in boundary_input_edge_numbers:
+            continue
+        # Index of the third node (the one not making up the edge) going in a CCW fashion
+        m = (k + 1) % 3
+        # Create the ccw node list started from the first node of the edge
+        nodes_lk = (all_nodes[nodes[l]], all_nodes[nodes[k]], all_nodes[nodes[m]])
+        # These constants are for the first edge (call it edge l)
+        a_i_l, a_j_l = nodes_lk[1][0] * nodes_lk[2][1] - nodes_lk[2][0] * nodes_lk[1][1], nodes_lk[2][0] * nodes_lk[0][
+            1] - nodes_lk[0][0] * nodes_lk[2][1]
+        b_i_l, b_j_l = nodes_lk[1][1] - nodes_lk[2][1], nodes_lk[2][1] - nodes_lk[0][1]
+        c_i_l, c_j_l = nodes_lk[2][0] - nodes_lk[1][0], nodes_lk[0][0] - nodes_lk[2][0]
+        # These come from the edge basis function definitions (see NASA paper eqs. 51 and 56-60)
+        A_l = a_i_l * b_j_l - a_j_l * b_i_l
+        B_l = c_i_l * b_j_l - c_j_l * b_i_l
+        C_l = a_i_l * c_j_l - a_j_l * c_i_l
+        D_l = b_i_l * c_j_l - b_j_l * c_i_l
+
+        # Perform the N_i \dot K_N integral
+
+        # Iterate over the 3 edges of the element (p stands for prime here, see Jin's book pg 455)
+        for l_p, k_p in ((0, 1), (1, 2), (2, 0)):
+            # The second edge whose basis vector will be integrated against the other edge (edge1)
+            edge2 = Edge(nodes[l_p], nodes[k_p])
+            # Skip edges on the boundary
+            if all_edges_map[edge2] in boundary_input_edge_numbers:
+                continue
+            # Index of the third node (the one not making up the edge) going in a CCW fashion
+            m_p = (k_p + 1) % 3
+            # Create the ccw node list started from the first node of the edge
+            nodes_lpkp = (all_nodes[nodes[l_p]], all_nodes[nodes[k_p]], all_nodes[nodes[m_p]])
+            # Constants needed to calculate the integral involving the 2 edges
+            # These come from the nodal basis function definitions (see Jin's book pg 441)
+            # These constants are for the second edge (call it edge k)
+            a_i_k, a_j_k = nodes_lpkp[1][0] * nodes_lpkp[2][1] - nodes_lpkp[2][0] * nodes_lpkp[1][1], nodes_lpkp[2][0] * \
+                           nodes_lpkp[0][1] - nodes_lpkp[0][0] * nodes_lpkp[2][1]
+            b_i_k, b_j_k = nodes_lpkp[1][1] - nodes_lpkp[2][1], nodes_lpkp[2][1] - nodes_lpkp[0][1]
+            c_i_k, c_j_k = nodes_lpkp[2][0] - nodes_lpkp[1][0], nodes_lpkp[0][0] - nodes_lpkp[2][0]
+            # These come from the edge basis function definitions (see NASA paper eqs. 51 and 56-60)
+            A_k = a_i_k * b_j_k - a_j_k * b_i_k
+            B_k = c_i_k * b_j_k - c_j_k * b_i_k
+            C_k = a_i_k * c_j_k - a_j_k * c_i_k
+            D_k = b_i_k * c_j_k - b_j_k * c_i_k
+            # See An Introduction to the finite element method 3rd edition page 426 and NASA paper eqs. 73-77
+            I1 = A_l * A_k + C_l * C_k
+            I2 = (C_l * D_k + C_k * D_l) * x_mean
+            I3 = (A_l * B_k + A_k * B_l) * y_mean
+            I4 = B_l * B_k * (sum([node[1] ** 2 for node in nodes_lk]) + 9 * y_mean ** 2) / 12
+            I5 = D_l * D_k * (sum([node[0] ** 2 for node in nodes_lk]) + 9 * x_mean ** 2) / 12
+            # Ni_bar dot Nj_bar - NASA paper pg 12
+            value = edge1.length * edge2.length * (I1 + I2 + I3 + I4 + I5) / 16 / (area ** 3)
+            K[remap_edge_nums[all_edges_map[edge1]], remap_edge_nums[all_edges_map[edge2]]] += value * beta * 1j

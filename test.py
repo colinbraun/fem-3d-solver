@@ -1,5 +1,6 @@
 # File to test out little pieces of code before using them in main.py
 import numpy as np
+from iwaveguide.waveguide import Waveguide
 
 
 def foo(x, y, z):
@@ -161,3 +162,8 @@ values = np.zeros([len(sample_points), 1])
 for i in range(len(sample_points)):
     values[i, 0] = foo(sample_points[i, 0], sample_points[i, 1], sample_points[i, 2])
 result = quad_eval(p1, p2, p3, values)
+
+waveguide_2d = Waveguide("rect_mesh_two_epsilons_coarse.inp", 2, [1, 1])
+
+betas, all_eigenvectors, k0s = waveguide_2d.solve()
+waveguide_2d.plot_dispersion(k0s, betas)
