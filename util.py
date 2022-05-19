@@ -194,6 +194,44 @@ class TetrahedralElement:
         self.volume = abs(np.linalg.det(mat) / 6)
 
 
+def construct_triangles_from_surface(element_to_node_conn, all_edges_map):
+    """
+    Construct a numpy array of TriangleElement objects for a particular surface.
+    :param element_to_node_conn: A numpy array. Each row corresponds to a triangle in the surface (values are global node nums).
+    :param all_edges_map: A dictionary mapping Edge objects to global edge numbers.
+    :return: A numpy array of TriangleElements and a set of Edge objects that make up the surface.
+    """
+    # EDGE SHENANIGANS
+    # TODO: MAKE SURE NOTHING FUNNY GOING ON WITH CCW VS CW ROTATION
+    # The element-to-edge connectivity list
+    element_to_edge_conn = []
+    # The TriangleElement list
+    triangles = []
+    # All of the Edge objects that make up this surface
+    edges = set()
+    # Iterate over each element in the nodal connectivity list
+    for element in element_to_node_conn:
+        # Construct 3 edges (these have been created before when we went through all the tetrahedrons)
+        edge1 = Edge(element[0], element[1])
+        edge2 = Edge(element[0], element[2])
+        edge3 = Edge(element[1], element[2])
+        # Get the global edge numbers for these 3 edges
+        edge1_number = all_edges_map[edge1]
+        edge2_number = all_edges_map[edge2]
+        edge3_number = all_edges_map[edge3]
+        # Add the element_to_node_conn global edge numbers to the connectivity list
+        element_to_edge_conn.append(np.array([edge1_number, edge2_number, edge3_number]))
+        triangle = TriangleElement(element, np.array((edge1_number, edge2_number, edge3_number)), 1)
+        triangles.append(triangle)
+        edges.add(edge1)
+        edges.add(edge2)
+        edges.add(edge3)
+
+    # Transform into numpy array
+    triangles = np.array(triangles)
+    return triangles, edges
+
+
 def load_mesh_block(filename, block_name):
     """
     A function to load a block of data from a .inp file (abaqus format).
@@ -294,15 +332,18 @@ def load_mesh(filename):
 
     # Load the PEC Wall triangle elements
     boundary_pec_elements = load_mesh_block(filename, "PECWalls")
-    boundary_pec_edges = [Edge(element[0], element[1]) for element in boundary_pec_elements]
+    # boundary_pec_edges = [Edge(element[0], element[1]) for element in boundary_pec_elements]
+    boundary_pec_triangles, boundary_pec_edges = construct_triangles_from_surface(boundary_pec_elements, all_edges_map)
     boundary_pec_edge_numbers = set(all_edges_map[edge] for edge in boundary_pec_edges)
     # Load the InputPort triangle elements
     boundary_input_elements = load_mesh_block(filename, "InputPort")
-    boundary_input_edges = [Edge(element[0], element[1]) for element in boundary_input_elements]
+    # boundary_input_edges = [Edge(element[0], element[1]) for element in boundary_input_elements]
+    boundary_input_triangles, boundary_input_edges = construct_triangles_from_surface(boundary_input_elements, all_edges_map)
     boundary_input_edge_numbers = set(all_edges_map[edge] for edge in boundary_input_edges)
     # Load the OutputPort triangle elements
     boundary_output_elements = load_mesh_block(filename, "OutputPort")
-    boundary_output_edges = [Edge(element[0], element[1]) for element in boundary_output_elements]
+    # boundary_output_edges = [Edge(element[0], element[1]) for element in boundary_output_elements]
+    boundary_output_triangles, boundary_output_edges = construct_triangles_from_surface(boundary_output_elements, all_edges_map)
     boundary_output_edge_numbers = set(all_edges_map[edge] for edge in boundary_output_edges)
 
     # Get the set of non-boundary global edge numbers
@@ -320,7 +361,9 @@ def load_mesh(filename):
     # boundary_output_edge_numbers: A set of all the global edge numbers that lie on the OutputPort wall of the geometry
     # remap_inner_edge_nums: A map that takes one of the inner edge numbers and maps it to a unique integer between [0, number of inner edges]
     # all_edges_map: A map from an Edge object to its global edge number
-    return all_nodes, all_tets, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map
+    # boundary_input_triangles: A numpy array of TriangleElement objects that make up the input port
+    # boundary_output_triangles: A numpy array of TriangleElement objects that make up the output port
+    return all_nodes, all_tets, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles
 
 
 def area(x1, y1, x2, y2, x3, y3):

@@ -4,7 +4,7 @@ import numpy as np
 
 # print(load_mesh_block("rectangular_waveguide_3d.inp", "ALLNODES"))
 # print(load_mesh_block("rectangular_waveguide_3d.inp", "InputPort"))
-all_nodes, tetrahedrons, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map = load_mesh("rectangular_waveguide_3d.inp")
+all_nodes, tetrahedrons, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles = load_mesh("rectangular_waveguide_3d.inp")
 # Initialize the K and b matrices
 K = np.zeros([len(remap_edge_nums), len(remap_edge_nums)])
 b = np.zeros([len(remap_edge_nums)])
