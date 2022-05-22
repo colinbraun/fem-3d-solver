@@ -5,6 +5,8 @@ from scipy.linalg import inv
 import matplotlib.pyplot as plt
 import math
 
+# Turn on interactive plotting
+plt.ion()
 # print(load_mesh_block("rectangular_waveguide_3d.inp", "ALLNODES"))
 # print(load_mesh_block("rectangular_waveguide_3d.inp", "InputPort"))
 all_nodes, tetrahedrons, tets_node_ids, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles = load_mesh("rectangular_waveguide_3d_less_coarse.inp")
@@ -285,7 +287,6 @@ for i in range(num_z_points):
             pt_x = x_points[k]
             field_points[k + j*num_y_points + i*num_z_points] = np.array([pt_x, pt_y, pt_z])
 
-# result = where(all_nodes, tets_node_ids, np.array([0, 0, 0]))
 tet_indices = where(all_nodes, tets_node_ids, field_points)
 
 # Compute the field at each of the points
@@ -296,5 +297,15 @@ for i, tet_index in enumerate(tet_indices):
     z_i = math.floor(i / (num_x_points * num_y_points)) % num_z_points
     y_i = math.floor(i / num_x_points) % num_y_points
     x_i = i % num_x_points
-    Ex[x_i, y_i, z_i], Ey[x_i, y_i, z_i], Ez[x_i, y_i, z_i] = tet.interpolate(phis, field_points[i])
+    # Note the indexing here is done with y_i first and x_i second. If we consider a grid being indexed, the first
+    # index corresponds to the row (vertical control), hence y_i first and x_i second
+    Ex[y_i, x_i, z_i], Ey[y_i, x_i, z_i], Ez[y_i, x_i, z_i] = tet.interpolate(phis, field_points[i])
 print("Finished calculating field data")
+
+plt.figure()
+color_image = plt.imshow(Ez[:, :, 0], extent=[x_min, x_max, y_min, y_max], cmap="cividis")
+plt.colorbar(label="Ez")
+X, Y = np.meshgrid(x_points, y_points)
+skip = (slice(None, None, 5), slice(None, None, 5))
+field_skip = (slice(None, None, 5), slice(None, None, 5), 0)
+plt.quiver(X[skip], Y[skip], Ex[field_skip], Ey[field_skip], color="black")
