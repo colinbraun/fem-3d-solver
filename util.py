@@ -192,6 +192,50 @@ class TetrahedralElement:
                [1, self.points[3][0], self.points[3][1], self.points[3][2]]]
         # This could be a method, but is frequently and always used.
         self.volume = abs(np.linalg.det(mat) / 6)
+        # Compute the simplex (barycentric) constants for the nodes of this TetrahedralElement
+        # Each row is for a node. Each column is for a, b, c, and d (in order) from NASA paper eq. 162
+        # These are stored in the same order as self.nodes (i.e. simplex_consts[0] are the constants for self.nodes[0])
+        all_cofactors = np.zeros([4, 4])
+        # Iterate over each row
+        for row in range(4):
+            cofactors = np.zeros([4])
+            # Iterate over each column, computing the cofactor determinant of the row + column combination
+            for col in range(4):
+                # Compute the cofactor (remove the proper row and column and compute the determinant)
+                cofactors[col] = np.linalg.det(np.delete(np.delete(np.append(self.points, np.ones([4, 1]), 1), row, axis=0), col, axis=1))
+            all_cofactors[row] = cofactors
+        self.simplex_consts = all_cofactors
+
+    def interpolate(self, phis, p):
+        """
+        Get the fields at point p using the given phi values for each edge. The phi values must be passed in the same
+        order as the edges field of this object.
+        :param phis: An iterable containing the 6 phi values, one for each edge.
+        :param p: The point to compute the Ex, Ey, and Ez fields at
+        :return: The Ex, Ey, and Ez fields.
+        """
+        x_component = 0
+        y_component = 0
+        z_component = 0
+        for edge_no in self.edges:
+            edge = TriangleElement.all_edges[edge_no]
+            indices_l = [np.argwhere(self.nodes == edge.node1)[0][0], np.argwhere(self.nodes == edge.node2)[0][0]]
+            # The simplex coordinates for nodes i and j of edge l
+            # Necessary constants from NASA paper eqs. 163-172
+            a_il, a_jl = self.simplex_consts[indices_l]
+            Axl = a_il[0]*a_jl[1] - a_il[1]*a_jl[0]
+            Bxl = a_il[2]*a_jl[1] - a_il[1]*a_jl[2]
+            Cxl = a_il[3]*a_jl[2] - a_il[2]*a_jl[3]
+            Ayl = a_il[0]*a_jl[2] - a_il[2]*a_jl[0]
+            Byl = a_il[1]*a_jl[2] - a_il[2]*a_jl[1]
+            Cyl = a_il[3]*a_jl[2] - a_il[2]*a_jl[3]
+            Azl = a_il[0]*a_jl[3] - a_il[3]*a_jl[0]
+            Bzl = a_il[1]*a_jl[3] - a_il[3]*a_jl[1]
+            Czl = a_il[2]*a_jl[3] - a_il[3]*a_jl[2]
+            x_component += edge.length / 36 / self.volume**2 * (Axl + Bxl*p[1] + Cxl*p[2])
+            y_component += edge.length / 36 / self.volume**2 * (Ayl + Byl*p[0] + Cyl*p[2])
+            z_component += edge.length / 36 / self.volume**2 * (Azl + Bzl*p[0] + Czl*p[1])
+        return x_component, y_component, z_component
 
 
 def construct_triangles_from_surface(element_to_node_conn, all_edges_map):
@@ -353,8 +397,12 @@ def load_mesh(filename):
     # A map that takes one of the non-PEC edge numbers and maps it to a unique integer between [0, num of non-PEC edges]
     remap_edge_nums = {item: i for i, item in enumerate(edge_nums)}
 
+    # Created for convenience if a point lies in a mesh
+    tets_node_ids = np.array([tet.nodes for tet in all_tets])
+
     # Return the results of loading the mesh
     # all_tets: A list of all the TetrahedralElement objects that make up the entire geometry
+    # tets_node_ids: A list containing lists of length 4 containing the 4 global node numbers that make up the tets.
     # all_edges: A list of all the global edge numbers that make up the entire geometry
     # boundary_pec_edge_numbers: A set of all the global edge numbers that lie on the PEC wall of the geometry
     # boundary_input_edge_numbers: A set of all the global edge numbers that lie on the InputPort wall of the geometry
@@ -363,7 +411,7 @@ def load_mesh(filename):
     # all_edges_map: A map from an Edge object to its global edge number
     # boundary_input_triangles: A numpy array of TriangleElement objects that make up the input port
     # boundary_output_triangles: A numpy array of TriangleElement objects that make up the output port
-    return all_nodes, all_tets, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles
+    return all_nodes, all_tets, tets_node_ids, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles
 
 
 def area(x1, y1, x2, y2, x3, y3):
@@ -507,3 +555,33 @@ def quad_eval(p1, p2, p3, f):
         val = val+weights[m]*f[m, :]
     val = val*Ak
     return val
+
+
+def where(node_coordinates, node_ids, p):
+    """
+    Find where a point lies in a mesh.
+    :param node_coordinates: A numpy array containing all the nodes.
+    :param node_ids: The TetrahedralElement object numpy array composing the mesh
+    :param p: The point or points to be tested
+    :return: A numpy array corresponding to the numpy array of TetrahedralElement objects. -1 -> Outside, tet# -> Inside.
+    """
+    ori=node_coordinates[node_ids[:, 0], :]
+    v1=node_coordinates[node_ids[:, 1], :]-ori
+    v2=node_coordinates[node_ids[:, 2], :]-ori
+    v3=node_coordinates[node_ids[:, 3], :]-ori
+    n_tet=len(node_ids)
+    v1r=v1.T.reshape((3,1,n_tet))
+    v2r=v2.T.reshape((3,1,n_tet))
+    v3r=v3.T.reshape((3,1,n_tet))
+    mat = np.concatenate((v1r,v2r,v3r), axis=1)
+    inv_mat = np.linalg.inv(mat.T).T    # https://stackoverflow.com/a/41851137/12056867
+    if p.size==3:
+        p=p.reshape((1,3))
+    n_p=p.shape[0]
+    orir=np.repeat(ori[:,:,np.newaxis], n_p, axis=2)
+    newp=np.einsum('imk,kmj->kij',inv_mat,p.T-orir)
+    val=np.all(newp>=0, axis=1) & np.all(newp <=1, axis=1) & (np.sum(newp, axis=1)<=1)
+    id_tet, id_p = np.nonzero(val)
+    res = -np.ones(n_p, dtype=id_tet.dtype) # Sentinel value
+    res[id_p]=id_tet
+    return res

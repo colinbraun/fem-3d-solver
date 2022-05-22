@@ -1,4 +1,6 @@
 # File to test out little pieces of code before using them in main.py
+import time
+# alternatively, import cupy as np if len(points)>1e7 and GPU
 import numpy as np
 from iwaveguide.waveguide import Waveguide
 from util import quad_eval, quad_sample_points
@@ -52,3 +54,70 @@ result = quad_eval(p1, p2, p3, values)
 
 # betas, all_eigenvectors, k0s = waveguide_2d.solve()
 # waveguide_2d.plot_dispersion(k0s, betas)
+
+
+def Tetrahedron(vertices):
+    """
+    Given a list of the xyz coordinates of the vertices of a tetrahedron,
+    return tetrahedron coordinate system
+    """
+    origin, *rest = vertices
+    mat = (np.array(rest) - origin).T
+    tetra = np.linalg.inv(mat)
+    return tetra, origin
+
+
+def point_inside(point, tetra, origin):
+    """
+    Takes a single point or array of points, as well as tetra and origin objects returned by
+    the Tetrahedron function.
+    Returns a boolean or boolean array indicating whether the point is inside the tetrahedron.
+    """
+    newp = np.matmul(tetra, (point-origin).T).T
+    return np.all(newp>=0, axis=-1) & np.all(newp <=1, axis=-1) & (np.sum(newp, axis=-1) <=1)
+
+
+npt=10000000
+points = np.random.rand(npt, 3)
+# Coordinates of vertices A, B, C and D
+A=np.array([0.1, 0.1, 0.1])
+B=np.array([0.9, 0.2, 0.1])
+C=np.array([0.1, 0.9, 0.1])
+D=np.array([0.3, 0.3, 0.9])
+# A point that is inside the above tet:
+pts = np.array([[0.2, 0.2, 0.09], [0.2, 0.2, 0.11]])
+
+start_time = time.time()
+vertices = [A, B, C, D]
+tetra, origin = Tetrahedron(vertices)
+inTet = point_inside(points, tetra, origin)
+print("--- %s seconds ---" % (time.time() - start_time))
+# print(point_inside(pt, tetra, origin))
+
+
+def where(node_coordinates, node_ids, p):
+    ori=node_coordinates[node_ids[:,0],:]
+    v1=node_coordinates[node_ids[:,1],:]-ori
+    v2=node_coordinates[node_ids[:,2],:]-ori
+    v3=node_coordinates[node_ids[:,3],:]-ori
+    n_tet=len(node_ids)
+    v1r=v1.T.reshape((3,1,n_tet))
+    v2r=v2.T.reshape((3,1,n_tet))
+    v3r=v3.T.reshape((3,1,n_tet))
+    mat = np.concatenate((v1r,v2r,v3r), axis=1)
+    inv_mat = np.linalg.inv(mat.T).T    # https://stackoverflow.com/a/41851137/12056867
+    if p.size==3:
+        p=p.reshape((1,3))
+    n_p=p.shape[0]
+    orir=np.repeat(ori[:,:,np.newaxis], n_p, axis=2)
+    newp=np.einsum('imk,kmj->kij',inv_mat,p.T-orir)
+    val=np.all(newp>=0, axis=1) & np.all(newp <=1, axis=1) & (np.sum(newp, axis=1)<=1)
+    id_tet, id_p = np.nonzero(val)
+    res = -np.ones(n_p, dtype=id_tet.dtype) # Sentinel value
+    res[id_p]=id_tet
+    return res
+
+
+all_nodes = np.array(vertices)
+node_ids_test = np.array([[0, 1, 2, 3]])
+output = where(all_nodes, node_ids_test, pts)

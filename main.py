@@ -1,11 +1,13 @@
-from util import load_mesh, Edge, quad_eval, quad_sample_points
+from util import load_mesh, Edge, quad_eval, quad_sample_points, where
 import numpy as np
 from iwaveguide.waveguide import Waveguide
 from scipy.linalg import inv
+import matplotlib.pyplot as plt
+import math
 
 # print(load_mesh_block("rectangular_waveguide_3d.inp", "ALLNODES"))
 # print(load_mesh_block("rectangular_waveguide_3d.inp", "InputPort"))
-all_nodes, tetrahedrons, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles = load_mesh("rectangular_waveguide_3d.inp")
+all_nodes, tetrahedrons, tets_node_ids, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles = load_mesh("rectangular_waveguide_3d_less_coarse.inp")
 # Initialize the K and b matrices
 K = np.zeros([len(remap_edge_nums), len(remap_edge_nums)], dtype=complex)
 b = np.zeros([len(remap_edge_nums)], dtype=complex)
@@ -16,6 +18,7 @@ waveguide.solve_k0(4)
 k0 = waveguide.k0
 beta = waveguide.get_selected_beta()
 
+print("Begin constructing equation matrix")
 # Iterate over the tetrahedrons and construct the K and b matrices (this concept comes from Jin page 454)
 for tet in tetrahedrons:
 
@@ -23,17 +26,6 @@ for tet in tetrahedrons:
     x_mean = np.average(tet.points[:, 0])
     y_mean = np.average(tet.points[:, 1])
     z_mean = np.average(tet.points[:, 2])
-    # Start by finding the simplex (barycentric) coordinates for the nodes
-    # Each row is for a node. Each column is for a, b, c, and d (in order) from NASA paper eq. 162
-    all_cofactors = np.zeros([4, 4])
-    # Iterate over each row
-    for row in range(4):
-        cofactors = np.zeros([4])
-        # Iterate over each column, computing the cofactor determinant of the row + column combination
-        for col in range(4):
-            # Compute the cofactor (remove the proper row and column and compute the determinant)
-            cofactors[col] = np.linalg.det(np.delete(np.delete(np.append(tet.points, np.ones([4, 1]), 1), row, axis=0), col, axis=1))
-        all_cofactors[row] = cofactors
 
     # Iterate over the edges of the tetrahedron
     for edgei in tet.edges:
@@ -48,7 +40,7 @@ for tet in tetrahedrons:
         indices_l = [np.argwhere(tet.nodes == edge1.node1)[0][0], np.argwhere(tet.nodes == edge1.node2)[0][0]]
         # The simplex coordinates for nodes i and j of edge l
         # Necessary constants from NASA paper eqs. 163-172
-        a_il, a_jl = all_cofactors[indices_l]
+        a_il, a_jl = tet.simplex_consts[indices_l]
         Axl = a_il[0]*a_jl[1] - a_il[1]*a_jl[0]
         Bxl = a_il[2]*a_jl[1] - a_il[1]*a_jl[2]
         Cxl = a_il[3]*a_jl[2] - a_il[2]*a_jl[3]
@@ -69,7 +61,7 @@ for tet in tetrahedrons:
             # Find the indices of the edge of interest
             indices_k = [np.argwhere(tet.nodes == edge2.node1)[0][0], np.argwhere(tet.nodes == edge2.node2)[0][0]]
             # The simplex coordinates for nodes i and j of edge l
-            a_ik, a_jk = all_cofactors[indices_k]
+            a_ik, a_jk = tet.simplex_consts[indices_k]
             # Necessary constants from NASA paper eqs. 163-172
             Axk = a_ik[0] * a_jk[1] - a_ik[1] * a_jk[0]
             Bxk = a_ik[2] * a_jk[1] - a_ik[1] * a_jk[2]
@@ -256,8 +248,53 @@ for element in boundary_output_triangles:
             value = edge1.length * edge2.length * (I1 + I2 + I3 + I4 + I5) / 16 / (area ** 3)
             K[remap_edge_nums[all_edges_map[edge1]], remap_edge_nums[all_edges_map[edge2]]] += value * beta * 1j
 
-print("Finished constructing equation matrix. Moving on to solving the system of equations.")
-
+print("Finished constructing equation matrix")
+print("Solving equation matrix")
 edge_coefficients = np.dot(inv(K), b)
+print("Finished solving equation matrix")
 
-print("Finished solving matrix equation")
+# ----------------------GET FIELDS--------------------------
+print("Calculating field data")
+# Compute the bounds of the waveguide
+x_min = np.amin(all_nodes[:, 0])
+x_max = np.amax(all_nodes[:, 0])
+y_min = np.amin(all_nodes[:, 1])
+y_max = np.amax(all_nodes[:, 1])
+z_min = np.amin(all_nodes[:, 2])
+z_max = np.amax(all_nodes[:, 2])
+# Create a cuboid grid of points that the geometry is inscribed in
+num_x_points = 100
+x_points = np.linspace(x_min, x_max, num_x_points)
+num_y_points = 100
+y_points = np.linspace(y_min, y_max, num_y_points)
+num_z_points = 1
+# z_points = np.linspace(z_min, z_max, num_z_points)
+# For now, just get the fields at z_min
+z_points = np.array([z_min])
+Ex = np.zeros([num_x_points, num_y_points, num_z_points])
+Ey = np.zeros([num_x_points, num_y_points, num_z_points])
+Ez = np.zeros([num_x_points, num_y_points, num_z_points])
+
+field_points = np.zeros([num_x_points * num_y_points * num_z_points, 3])
+# Iterate over the points
+for i in range(num_z_points):
+    pt_z = z_points[i]
+    for j in range(num_y_points):
+        pt_y = y_points[j]
+        for k in range(num_x_points):
+            pt_x = x_points[k]
+            field_points[k + j*num_y_points + i*num_z_points] = np.array([pt_x, pt_y, pt_z])
+
+# result = where(all_nodes, tets_node_ids, np.array([0, 0, 0]))
+tet_indices = where(all_nodes, tets_node_ids, field_points)
+
+# Compute the field at each of the points
+for i, tet_index in enumerate(tet_indices):
+    tet = tetrahedrons[tet_index]
+    phis = [edge_coefficients[remap_edge_nums[edge]] if edge in remap_edge_nums else 0 for edge in tet.edges]
+    ex, ey, ez = tet.interpolate(phis, field_points[i])
+    z_i = math.floor(i / (num_x_points * num_y_points)) % num_z_points
+    y_i = math.floor(i / num_x_points) % num_y_points
+    x_i = i % num_x_points
+    Ex[x_i, y_i, z_i], Ey[x_i, y_i, z_i], Ez[x_i, y_i, z_i] = tet.interpolate(phis, field_points[i])
+print("Finished calculating field data")
