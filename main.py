@@ -40,7 +40,7 @@ for tet in tetrahedrons:
         node_il, node_jl = all_nodes[edge1.node1], all_nodes[edge1.node2]
 
         indices_l = [np.argwhere(tet.nodes == edge1.node1)[0][0], np.argwhere(tet.nodes == edge1.node2)[0][0]]
-        # The simplex coordinates for nodes i and j of edge l
+        # The simplex constants for nodes i and j of edge l
         # Necessary constants from NASA paper eqs. 163-172
         a_il, a_jl = tet.simplex_consts[indices_l]
         Axl = a_il[0]*a_jl[1] - a_il[1]*a_jl[0]
@@ -52,6 +52,23 @@ for tet in tetrahedrons:
         Azl = a_il[0]*a_jl[3] - a_il[3]*a_jl[0]
         Bzl = a_il[1]*a_jl[3] - a_il[3]*a_jl[1]
         Czl = a_il[2]*a_jl[3] - a_il[3]*a_jl[2]
+        # If we have an input port edge, we might need to perform the N_i integral (if this tet has a face on the port)
+        if edgei in boundary_input_edge_numbers:
+            # Need the third point that makes up the face of the input port
+            found_edge_no = -1
+            # Search for a different edge on the input port from this tetrahedral element
+            for edge in tet.edges:
+                if edge == edgei:
+                    continue
+                elif edge in boundary_input_edge_numbers:
+                    # We found an edge containing the third node, note it
+                    found_edge_no = edge
+                    break
+            # It is possible we do not find another edge that lies on the input port. We are checking for this here.
+            if found_edge_no != -1:
+                found_edge = all_edges[found_edge_no]
+                # nodes = np.unique(np.array([node_il, node_jl, all_nodes, all_nodes[found_edge.node1], all_nodes[found_edge.node2]]))
+
         # Iterate over the edges of the tetrahedron
         for edgej in tet.edges:
             # Skip over PEC walls
@@ -62,7 +79,7 @@ for tet in tetrahedrons:
 
             # Find the indices of the edge of interest
             indices_k = [np.argwhere(tet.nodes == edge2.node1)[0][0], np.argwhere(tet.nodes == edge2.node2)[0][0]]
-            # The simplex coordinates for nodes i and j of edge l
+            # The simplex constants for nodes i and j of edge l
             a_ik, a_jk = tet.simplex_consts[indices_k]
             # Necessary constants from NASA paper eqs. 163-172
             Axk = a_ik[0] * a_jk[1] - a_ik[1] * a_jk[0]
@@ -137,7 +154,7 @@ for element in boundary_input_triangles:
         D_l = b_i_l * c_j_l - b_j_l * c_i_l
 
         # Perform the N_i \dot K_N integral
-        sample_points = quad_sample_points(2, nodes_lk[0], nodes_lk[1], nodes_lk[2])
+        sample_points = quad_sample_points(3, nodes_lk[0], nodes_lk[1], nodes_lk[2])
         # Compute the x component of the edge interpolating function for each of the sample points
         n_ix = np.zeros([len(sample_points), 1])
         n_ix[:, 0] = A_l + B_l*sample_points[:, 0]

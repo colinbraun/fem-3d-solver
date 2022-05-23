@@ -36,7 +36,7 @@ for row in range(4):
         cofactors[col] = np.linalg.det(np.delete(np.delete(init_array, row, axis=0), col, axis=1))
     all_cofactors[row] = cofactors
 
-n = 2
+n = 3
 # p1 = [-1, 0, 0]
 # p2 = [1, 0, 0]
 # p3 = [0, 1, 0]
