@@ -45,7 +45,7 @@ for tet in tetrahedrons:
         a_il, a_jl = tet.simplex_consts[indices_l]
         Axl = a_il[0]*a_jl[1] - a_il[1]*a_jl[0]
         Bxl = a_il[2]*a_jl[1] - a_il[1]*a_jl[2]
-        Cxl = a_il[3]*a_jl[2] - a_il[2]*a_jl[3]
+        Cxl = a_il[3]*a_jl[1] - a_il[1]*a_jl[3]
         Ayl = a_il[0]*a_jl[2] - a_il[2]*a_jl[0]
         Byl = a_il[1]*a_jl[2] - a_il[2]*a_jl[1]
         Cyl = a_il[3]*a_jl[2] - a_il[2]*a_jl[3]
@@ -84,7 +84,7 @@ for tet in tetrahedrons:
             # Necessary constants from NASA paper eqs. 163-172
             Axk = a_ik[0] * a_jk[1] - a_ik[1] * a_jk[0]
             Bxk = a_ik[2] * a_jk[1] - a_ik[1] * a_jk[2]
-            Cxk = a_ik[3] * a_jk[2] - a_ik[2] * a_jk[3]
+            Cxk = a_ik[3] * a_jk[1] - a_ik[1] * a_jk[3]
             Ayk = a_ik[0] * a_jk[2] - a_ik[2] * a_jk[0]
             Byk = a_ik[1] * a_jk[2] - a_ik[2] * a_jk[1]
             Cyk = a_ik[3] * a_jk[2] - a_ik[2] * a_jk[3]
