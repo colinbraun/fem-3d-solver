@@ -202,7 +202,11 @@ class TetrahedralElement:
             # Iterate over each column, computing the cofactor determinant of the row + column combination
             for col in range(4):
                 # Compute the cofactor (remove the proper row and column and compute the determinant)
-                cofactors[col] = np.linalg.det(np.delete(np.delete(np.append(self.points, np.ones([4, 1]), 1), row, axis=0), col, axis=1))
+                if (row + col) % 2 == 0:
+                    negate = 1
+                else:
+                    negate = -1
+                cofactors[col] = negate * np.linalg.det(np.delete(np.delete(np.append(self.points, np.ones([4, 1]), 1), row, axis=0), col, axis=1))
             all_cofactors[row] = cofactors
         self.simplex_consts = all_cofactors
 
