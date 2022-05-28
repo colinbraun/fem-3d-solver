@@ -229,11 +229,7 @@ class TetrahedralElement:
             a_il, a_jl = self.simplex_consts[indices_l]
             Axl = a_il[0]*a_jl[1] - a_il[1]*a_jl[0]
             Bxl = a_il[2]*a_jl[1] - a_il[1]*a_jl[2]
-<<<<<<< HEAD
             Cxl = a_il[3] * a_jl[1] - a_il[1] * a_jl[3]
-=======
-            Cxl = a_il[3] * a_jl[2] - a_il[2] * a_jl[3]
->>>>>>> 3e2e12dea6b122f33b1c0ba3a145fd186516d142
             Ayl = a_il[0]*a_jl[2] - a_il[2]*a_jl[0]
             Byl = a_il[1]*a_jl[2] - a_il[2]*a_jl[1]
             Cyl = a_il[3]*a_jl[2] - a_il[2]*a_jl[3]
