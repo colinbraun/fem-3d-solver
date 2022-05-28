@@ -202,7 +202,11 @@ class TetrahedralElement:
             # Iterate over each column, computing the cofactor determinant of the row + column combination
             for col in range(4):
                 # Compute the cofactor (remove the proper row and column and compute the determinant)
-                cofactors[col] = np.linalg.det(np.delete(np.delete(np.append(self.points, np.ones([4, 1]), 1), row, axis=0), col, axis=1))
+                if (row + col) % 2 == 0:
+                    negate = 1
+                else:
+                    negate = -1
+                cofactors[col] = negate * np.linalg.det(np.delete(np.delete(np.append(np.ones([4, 1]), self.points, 1), row, axis=0), col, axis=1))
             all_cofactors[row] = cofactors
         self.simplex_consts = all_cofactors
 
@@ -225,7 +229,7 @@ class TetrahedralElement:
             a_il, a_jl = self.simplex_consts[indices_l]
             Axl = a_il[0]*a_jl[1] - a_il[1]*a_jl[0]
             Bxl = a_il[2]*a_jl[1] - a_il[1]*a_jl[2]
-            Cxl = a_il[3]*a_jl[2] - a_il[2]*a_jl[3]
+            Cxl = a_il[3] * a_jl[1] - a_il[1] * a_jl[3]
             Ayl = a_il[0]*a_jl[2] - a_il[2]*a_jl[0]
             Byl = a_il[1]*a_jl[2] - a_il[2]*a_jl[1]
             Cyl = a_il[3]*a_jl[2] - a_il[2]*a_jl[3]
