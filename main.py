@@ -252,7 +252,7 @@ class Waveguide3D:
         :param plane: One of {"xy", "xz", "yz"} to select which plane to take a cut of. Currently a W.I.P.
         :param offset: The offset from the edge of the geometry in the direction perpendicular to the plane to calc at.
         :param phase: The phase in radians to calculate the fields at.
-        :return: The figure containing all the field data
+        :return: The figure containing all the field data (the result of running plt.figure()).
         """
         print("Calculating field data")
         # Compute the bounds of the waveguide
@@ -296,13 +296,14 @@ class Waveguide3D:
             Ex[y_i, x_i, z_i], Ey[y_i, x_i, z_i], Ez[y_i, x_i, z_i] = np.real(np.multiply(tet.interpolate(phis, field_points[i]), shift))
         print("Finished calculating field data")
 
-        plt.figure()
-        color_image = plt.imshow(Ez[:, :, 0], extent=[x_min, x_max, y_min, y_max], cmap="cividis")
+        fig = plt.figure()
+        plt.imshow(Ez[:, :, 0], extent=[x_min, x_max, y_min, y_max], cmap="cividis")
         plt.colorbar(label="Ez")
         X, Y = np.meshgrid(x_points, y_points)
         skip = (slice(None, None, 5), slice(None, None, 5))
         field_skip = (slice(None, None, 5), slice(None, None, 5), 0)
         plt.quiver(X[skip], Y[skip], Ex[field_skip], Ey[field_skip], color="black")
+        return fig
 
 
 waveguide = Waveguide3D("rectangular_waveguide_3d_less_coarse.inp")

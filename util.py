@@ -182,8 +182,7 @@ class TetrahedralElement:
         self.permittivity = permittivity
         # Store the unique set of points that make up this tetrahedron in no particular order
         self.nodes = np.unique(np.array([edge.node1 for edge in [TriangleElement.all_edges[i] for i in edges]] + [edge.node2 for edge in [TriangleElement.all_edges[i] for i in edges]], dtype=np.int32))
-        # Old tested method of getting the points for this tetrahedron
-        # self.points = TriangleElement.all_nodes[np.unique([edge.node1 for edge in [TriangleElement.all_edges[i] for i in edges]] + [edge.node2 for edge in [TriangleElement.all_edges[i] for i in edges]])]
+        # Convert the nodes from global node numbers to (x, y) coordinates
         self.points = TriangleElement.all_nodes[self.nodes]
         # Volume calculated using eq (157) in NASA paper
         mat = [[1, self.points[0][0], self.points[0][1], self.points[0][2]],
@@ -249,8 +248,6 @@ def construct_triangles_from_surface(element_to_node_conn, all_edges_map):
     :param all_edges_map: A dictionary mapping Edge objects to global edge numbers.
     :return: A numpy array of TriangleElements and a set of Edge objects that make up the surface.
     """
-    # EDGE SHENANIGANS
-    # TODO: MAKE SURE NOTHING FUNNY GOING ON WITH CCW VS CW ROTATION
     # The element-to-edge connectivity list
     element_to_edge_conn = []
     # The TriangleElement list
@@ -339,8 +336,6 @@ def load_mesh(filename):
     tetrahedrons = []
     # Iterate over all the tetrahedrons
     for tet in element_to_node_conn:
-        # The list to hold the 4 triangle elements that make up the tetrahedron
-        triangle_elements = []
         # The set holding the 6 global edge numbers of this tetrahedron
         tet_edges = set()
         # Iterate over each triangle face of the tetrahedron
@@ -366,8 +361,6 @@ def load_mesh(filename):
             tet_edges.add(edge1_number)
             tet_edges.add(edge2_number)
             tet_edges.add(edge3_number)
-            # triangle = TriangleElement(np.array(element), np.array((edge1_number, edge2_number, edge3_number)), 1)
-            # triangle_elements.append(triangle)
         # Create the tetrahedron object, converting the global edge numbers set to a numpy array
         tetrahedrons.append(TetrahedralElement(np.array(np.array(list(tet_edges)))))
 
@@ -380,18 +373,15 @@ def load_mesh(filename):
 
     # Load the PEC Wall triangle elements
     boundary_pec_elements = load_mesh_block(filename, "PECWalls")
-    # boundary_pec_edges = [Edge(element[0], element[1]) for element in boundary_pec_elements]
     boundary_pec_triangles, boundary_pec_edges = construct_triangles_from_surface(boundary_pec_elements, all_edges_map)
     boundary_pec_edge_numbers = set(all_edges_map[edge] for edge in boundary_pec_edges)
     # Load the InputPort triangle elements
     boundary_input_elements = load_mesh_block(filename, "InputPort")
-    # boundary_input_edges = [Edge(element[0], element[1]) for element in boundary_input_elements]
-    boundary_input_triangles, boundary_input_edges = construct_triangles_from_surface(boundary_input_elements, all_edges_map)
+    _, boundary_input_edges = construct_triangles_from_surface(boundary_input_elements, all_edges_map)
     boundary_input_edge_numbers = set(all_edges_map[edge] for edge in boundary_input_edges)
     # Load the OutputPort triangle elements
     boundary_output_elements = load_mesh_block(filename, "OutputPort")
-    # boundary_output_edges = [Edge(element[0], element[1]) for element in boundary_output_elements]
-    boundary_output_triangles, boundary_output_edges = construct_triangles_from_surface(boundary_output_elements, all_edges_map)
+    _, boundary_output_edges = construct_triangles_from_surface(boundary_output_elements, all_edges_map)
     boundary_output_edge_numbers = set(all_edges_map[edge] for edge in boundary_output_edges)
 
     # Get a list of tetrahedrons that have a face that lies on the input and output port surfaces
@@ -410,10 +400,7 @@ def load_mesh(filename):
         if boundary_output_count >= 2:
             boundary_output_tets.add(tet)
 
-    # Get the set of non-boundary global edge numbers
-    # inner_edge_numbers = set(np.arange(0, len(all_edges))) - boundary_pec_edge_numbers - boundary_input_edge_numbers\
-    # - boundary_output_edge_numbers
-    # Different version of above:
+    # Get the set of non-PEC global edge numbers
     edge_nums = set(np.arange(0, len(all_edges))) - boundary_pec_edge_numbers
     # A map that takes one of the non-PEC edge numbers and maps it to a unique integer between [0, num of non-PEC edges]
     remap_edge_nums = {item: i for i, item in enumerate(edge_nums)}
