@@ -411,7 +411,8 @@ def load_mesh(filename):
             boundary_output_tets.add(tet)
 
     # Get the set of non-boundary global edge numbers
-    # inner_edge_numbers = set(np.arange(0, len(all_edges))) - boundary_pec_edge_numbers - boundary_input_edge_numbers - boundary_output_edge_numbers
+    # inner_edge_numbers = set(np.arange(0, len(all_edges))) - boundary_pec_edge_numbers - boundary_input_edge_numbers\
+    # - boundary_output_edge_numbers
     # Different version of above:
     edge_nums = set(np.arange(0, len(all_edges))) - boundary_pec_edge_numbers
     # A map that takes one of the non-PEC edge numbers and maps it to a unique integer between [0, num of non-PEC edges]
@@ -427,13 +428,11 @@ def load_mesh(filename):
     # boundary_pec_edge_numbers: A set of all the global edge numbers that lie on the PEC wall of the geometry
     # boundary_input_edge_numbers: A set of all the global edge numbers that lie on the InputPort wall of the geometry
     # boundary_output_edge_numbers: A set of all the global edge numbers that lie on the OutputPort wall of the geometry
-    # remap_inner_edge_nums: A map that takes one of the inner edge numbers and maps it to a unique integer between [0, number of inner edges]
+    # remap_edge_nums: A map that takes one of the inner edge numbers and maps it to a unique integer
     # all_edges_map: A map from an Edge object to its global edge number
-    # boundary_input_triangles: A numpy array of TriangleElement objects that make up the input port
-    # boundary_output_triangles: A numpy array of TriangleElement objects that make up the output port
     # boundary_input_tets: A set of tetrahedrons that have a face on the boundary of the input port
     # boundary_output_tets: A set of tetrahedrons that have a face on the buondary of the output port
-    return all_nodes, all_tets, tets_node_ids, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles, boundary_input_tets, boundary_output_tets
+    return all_nodes, all_tets, tets_node_ids, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_tets, boundary_output_tets
 
 
 def area(x1, y1, x2, y2, x3, y3):
