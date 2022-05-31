@@ -229,7 +229,7 @@ class TetrahedralElement:
             a_il, a_jl = self.simplex_consts[indices_l]
             Axl = a_il[0]*a_jl[1] - a_il[1]*a_jl[0]
             Bxl = a_il[2]*a_jl[1] - a_il[1]*a_jl[2]
-            Cxl = a_il[3] * a_jl[1] - a_il[1] * a_jl[3]
+            Cxl = a_il[3]*a_jl[1] - a_il[1]*a_jl[3]
             Ayl = a_il[0]*a_jl[2] - a_il[2]*a_jl[0]
             Byl = a_il[1]*a_jl[2] - a_il[2]*a_jl[1]
             Cyl = a_il[3]*a_jl[2] - a_il[2]*a_jl[3]
@@ -394,6 +394,22 @@ def load_mesh(filename):
     boundary_output_triangles, boundary_output_edges = construct_triangles_from_surface(boundary_output_elements, all_edges_map)
     boundary_output_edge_numbers = set(all_edges_map[edge] for edge in boundary_output_edges)
 
+    # Get a list of tetrahedrons that have a face that lies on the input and output port surfaces
+    boundary_input_tets = set()
+    boundary_output_tets = set()
+    for tet in all_tets:
+        boundary_input_count = 0
+        boundary_output_count = 0
+        for edge in tet.edges:
+            if edge in boundary_input_edge_numbers:
+                boundary_input_count += 1
+            if edge in boundary_output_edge_numbers:
+                boundary_output_count += 1
+        if boundary_input_count >= 2:
+            boundary_input_tets.add(tet)
+        if boundary_output_count >= 2:
+            boundary_output_tets.add(tet)
+
     # Get the set of non-boundary global edge numbers
     # inner_edge_numbers = set(np.arange(0, len(all_edges))) - boundary_pec_edge_numbers - boundary_input_edge_numbers - boundary_output_edge_numbers
     # Different version of above:
@@ -415,7 +431,9 @@ def load_mesh(filename):
     # all_edges_map: A map from an Edge object to its global edge number
     # boundary_input_triangles: A numpy array of TriangleElement objects that make up the input port
     # boundary_output_triangles: A numpy array of TriangleElement objects that make up the output port
-    return all_nodes, all_tets, tets_node_ids, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles
+    # boundary_input_tets: A set of tetrahedrons that have a face on the boundary of the input port
+    # boundary_output_tets: A set of tetrahedrons that have a face on the buondary of the output port
+    return all_nodes, all_tets, tets_node_ids, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_triangles, boundary_output_triangles, boundary_input_tets, boundary_output_tets
 
 
 def area(x1, y1, x2, y2, x3, y3):

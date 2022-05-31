@@ -43,12 +43,17 @@ n = 3
 p1 = [0, 0, 0]
 p2 = [1, 1/2, 0]
 p3 = [0, 1, 0]
-sample_points = quad_sample_points(n, p1, p2, p3)
+# sample_points = quad_sample_points(n, p1, p2, p3)
+# Try the clockwise fashion:
+sample_points = quad_sample_points(n, p3, p2, p1)
 values = np.zeros([len(sample_points), 1])
 for i in range(len(sample_points)):
     values[i, 0] = foo(sample_points[i, 0], sample_points[i, 1], sample_points[i, 2])
 # The result of this should be 1/3 (and has been verified to be this)
-result = quad_eval(p1, p2, p3, values)
+# result = quad_eval(p1, p2, p3, values)
+# Try the clockwise fashion:
+result = quad_eval(p2, p3, p1, values)
+# The result appears to be the same regardless of order
 
 # waveguide_2d = Waveguide("rect_mesh_two_epsilons_coarse.inp", 2, [1, 1])
 
