@@ -20,7 +20,7 @@ class Waveguide3D:
         self.K = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)], dtype=complex)
         self.b = np.zeros([len(self.remap_edge_nums)], dtype=complex)
         self.input_port = Waveguide("rect_mesh_two_epsilons_coarse.inp", ["EB1", "EB2"], "EB3")
-        self.input_port.set_mode_index(2)
+        self.input_port.set_mode_index(4)
         self.input_port.solve_k0(4)
         # TODO: Change this to have an output port that differs from the input port
         self.output_port = self.input_port
@@ -278,7 +278,7 @@ class Waveguide3D:
                 pt_y = y_points[j]
                 for k in range(num_x_points):
                     pt_x = x_points[k]
-                    field_points[k + j*num_y_points + i*num_z_points] = np.array([pt_x, pt_y, pt_z])
+                    field_points[k + j*num_x_points + i*num_x_points*num_y_points] = np.array([pt_x, pt_y, pt_z])
 
         tet_indices = where(self.all_nodes, self.tets_node_ids, field_points)
 
