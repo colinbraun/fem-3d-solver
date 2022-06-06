@@ -16,18 +16,34 @@ class Waveguide3D:
         Constructor of Waveguide3D.
         :param filename: A string giving the path to the .inp file to be loaded.
         """
+        # Load the mesh
         self.all_nodes, self.tetrahedrons, self.tets_node_ids, self.all_edges, self.boundary_pec_edge_numbers, self.boundary_input_edge_numbers, self.boundary_output_edge_numbers, self.remap_edge_nums, self.all_edges_map, self.boundary_input_tets, self.boundary_output_tets = load_mesh(filename)
+        # Find the minimum and maximum x, y, and z values of the waveguide.
+        self.x_min = np.amin(self.all_nodes[:, 0])
+        self.x_max = np.amax(self.all_nodes[:, 0])
+        self.y_min = np.amin(self.all_nodes[:, 1])
+        self.y_max = np.amax(self.all_nodes[:, 1])
+        self.z_min = np.amin(self.all_nodes[:, 2])
+        self.z_max = np.amax(self.all_nodes[:, 2])
+        # Construct empty K and b matrices
         self.K = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)], dtype=complex)
         self.b = np.zeros([len(self.remap_edge_nums)], dtype=complex)
+        # Create a Waveguide object of the input port
         self.input_port = Waveguide("rect_mesh_two_epsilons_coarse.inp", ["EB1", "EB2"], "EB3")
+        # Set its mode to be the specified propgating mode (4 -> TM11)
         self.input_port.set_mode_index(4)
+        # Solve the waveguide for k0 = 4
         self.input_port.solve_k0(4)
-        # TODO: Change this to have an output port that differs from the input port
+        # TODO: Change this to have an output port that differs from the input port. Will have to solve it too.
         self.output_port = self.input_port
         # Create an empty coefficient array. This is loaded by solve()
         self.edge_coefficients = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)])
 
     def solve(self):
+        """
+        Solve for the fields in the Waveguide3D object.
+        :return: The edge coefficients to be applied to the interpolating functions (indexed by global edge number).
+        """
         print("Begin constructing equation matrix")
         # Iterate over the tetrahedrons and construct the K and b matrices (this concept comes from Jin page 454)
         for tet in self.tetrahedrons:
@@ -241,14 +257,14 @@ class Waveguide3D:
         print("Solving equation matrix")
         self.edge_coefficients = np.dot(inv(self.K), self.b)
         print("Finished solving equation matrix")
+        return self.edge_coefficients
 
-    def plot_fields(self, num_x_points=100, num_y_points=100, num_z_points=1, plane="xy", offset=0.1, phase=0.0):
+    def plot_fields(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1, phase=0.):
         """
         Plot the fields in the selected plane. Note that field plotting is expensive due to needing to locate which
         tetrahedron each point lies in. Finer meshes may need to use fewer sample points.
-        :param num_x_points: The number of x points to compute the fields for.
-        :param num_y_points: The number of y points to compute the fields for.
-        :param num_z_points: The number of z points to compute the fields for.
+        :param num_axis1_points: The number of points to compute the fields for along the first axis in the plane.
+        :param num_axis2_points: The number of y points to compute the fields for along the second axis in the plane.
         :param plane: One of {"xy", "xz", "yz"} to select which plane to take a cut of.
         :param offset: The offset from the edge of the geometry in the direction perpendicular to the plane to calc at.
         :param phase: The phase in radians to calculate the fields at.
@@ -256,19 +272,11 @@ class Waveguide3D:
         """
         print("Calculating field data")
         # Compute the bounds of the waveguide
-        x_min = np.amin(self.all_nodes[:, 0])
-        x_max = np.amax(self.all_nodes[:, 0])
-        y_min = np.amin(self.all_nodes[:, 1])
-        y_max = np.amax(self.all_nodes[:, 1])
-        z_min = np.amin(self.all_nodes[:, 2])
-        z_max = np.amax(self.all_nodes[:, 2])
         # Create a cuboid grid of points that the geometry is inscribed in
-        offset_x = offset if plane.upper() == "YZ" else 0
-        offset_y = offset if plane.upper() == "XZ" else 0
-        offset_z = offset if plane.upper() == "XY" else 0
-        x_points = np.linspace(x_min+offset_x, x_max, num_x_points)
-        y_points = np.linspace(y_min+offset_y, y_max, num_y_points)
-        z_points = np.linspace(z_min+offset_z, z_max, num_z_points)
+        x_points = [self.x_min+offset] if plane.upper() == "YZ" else np.linspace(self.x_min, self.x_max, num_axis1_points)
+        y_points = [self.y_min+offset] if plane.upper() == "XZ" else np.linspace(self.y_min, self.y_max, num_axis1_points if plane.upper() == "YZ" else num_axis2_points)
+        z_points = [self.z_min+offset] if plane.upper() == "XY" else np.linspace(self.z_min, self.z_max, num_axis2_points)
+        num_x_points, num_y_points, num_z_points = len(x_points), len(y_points), len(z_points)
         Ex = np.zeros([num_z_points, num_y_points, num_x_points])
         Ey = np.zeros([num_z_points, num_y_points, num_x_points])
         Ez = np.zeros([num_z_points, num_y_points, num_x_points])
@@ -283,6 +291,7 @@ class Waveguide3D:
                     pt_x = x_points[k]
                     field_points[k + j*num_x_points + i*num_x_points*num_y_points] = np.array([pt_x, pt_y, pt_z])
 
+        # Find which tetrahedron each point lies in
         tet_indices = where(self.all_nodes, self.tets_node_ids, field_points)
 
         shift = e**(1j*phase)
@@ -301,25 +310,26 @@ class Waveguide3D:
         print("Finished calculating field data")
 
         fig = plt.figure()
+        plt.title(f"Fields in {plane.upper()}-plane, offset = {round(offset, 3)}")
         if plane.upper() == "YZ":
             axis1, axis2 = np.meshgrid(y_points, z_points)
             skip = (slice(None, None, 5), slice(None, None, 5))
             field_skip = (slice(None, None, 5), slice(None, None, 5), 0)
-            plt.imshow(Ex[:, :, 0], extent=[y_min, y_max, z_min, z_max], cmap="cividis")
-            plt.colorbar(label="Ez")
+            plt.imshow(Ex[:, :, 0], extent=[self.y_min, self.y_max, self.z_min, self.z_max], cmap="cividis")
+            plt.colorbar(label="Ex")
             plt.quiver(axis1[skip], axis2[skip], Ey[field_skip], Ez[field_skip], color="black")
         elif plane.upper() == "XZ":
             axis1, axis2 = np.meshgrid(x_points, z_points)
             skip = (slice(None, None, 5), slice(None, None, 5))
             field_skip = (slice(None, None, 5), 0, slice(None, None, 5))
-            plt.imshow(Ey[:, 0, :], extent=[x_min, x_max, z_min, z_max], cmap="cividis")
-            plt.colorbar(label="Ez")
+            plt.imshow(Ey[:, 0, :], extent=[self.x_min, self.x_max, self.z_min, self.z_max], cmap="cividis")
+            plt.colorbar(label="Ey")
             plt.quiver(axis1[skip], axis2[skip], Ex[field_skip], Ez[field_skip], color="black")
         elif plane.upper() == "XY":
             axis1, axis2 = np.meshgrid(x_points, y_points)
             skip = (slice(None, None, 5), slice(None, None, 5))
             field_skip = (0, slice(None, None, 5), slice(None, None, 5))
-            plt.imshow(Ez[0, :, :], extent=[x_min, x_max, y_min, y_max], cmap="cividis")
+            plt.imshow(Ez[0, :, :], extent=[self.x_min, self.x_max, self.y_min, self.y_max], cmap="cividis")
             plt.colorbar(label="Ez")
             plt.quiver(axis1[skip], axis2[skip], Ex[field_skip], Ey[field_skip], color="black")
         else:
@@ -330,4 +340,4 @@ class Waveguide3D:
 waveguide = Waveguide3D("rectangular_waveguide_3d_less_coarse.inp")
 waveguide.solve()
 for i in range(6):
-    waveguide.plot_fields(1, 100, 100, "yz", offset=0.1, phase=i*pi/3)
+    waveguide.plot_fields(plane="xy", offset=0.1, phase=i*pi/3)
