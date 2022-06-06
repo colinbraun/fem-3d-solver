@@ -29,8 +29,8 @@ class Waveguide3D:
         self.K = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)], dtype=complex)
         self.b = np.zeros([len(self.remap_edge_nums)], dtype=complex)
         # Create a Waveguide object of the input port
-        self.input_port = Waveguide("rect_mesh_two_epsilons_coarse.inp", ["EB1", "EB2"], "EB3")
-        # Set its mode to be the specified propgating mode (4 -> TM11)
+        self.input_port = Waveguide("rectangular_waveguide_20220606.inp", ["InputPort"], "InPortBoundary")
+        # Set its mode to be the specified propagating mode (4 -> TM11)
         self.input_port.set_mode_index(4)
         # Solve the waveguide for k0 = 4
         self.input_port.solve_k0(4)
@@ -337,7 +337,8 @@ class Waveguide3D:
         return fig
 
 
-waveguide = Waveguide3D("rectangular_waveguide_3d_less_coarse.inp")
+# waveguide = Waveguide3D("rectangular_waveguide_3d_less_coarse.inp")
+waveguide = Waveguide3D("rectangular_waveguide_20220606.inp")
 waveguide.solve()
-for i in range(6):
-    waveguide.plot_fields(plane="xy", offset=0.1, phase=i*pi/3)
+# for i in range(6):
+#     waveguide.plot_fields(plane="xy", offset=0.1, phase=i*pi/3)
