@@ -4,6 +4,7 @@ from iwaveguide.waveguide import Waveguide
 from scipy.linalg import inv
 import matplotlib.pyplot as plt
 from math import floor, e, pi
+import time
 
 # Turn on interactive plotting
 plt.ion()
@@ -29,7 +30,7 @@ class Waveguide3D:
         self.K = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)], dtype=complex)
         self.b = np.zeros([len(self.remap_edge_nums)], dtype=complex)
         # Create a Waveguide object of the input port
-        self.input_port = Waveguide("rectangular_waveguide_20220606.inp", ["InputPort"], "InPortBoundary")
+        self.input_port = Waveguide(filename, ["InputPort"], "InPortBoundary")
         # Set its mode to be the specified propagating mode (4 -> TM11)
         self.input_port.set_mode_index(4)
         # Solve the waveguide for k0 = 4
@@ -180,9 +181,11 @@ class Waveguide3D:
                             N_j = N_j * edge2.length / 36 / tet.volume**2
                             n_hat_x_nj = np.array([np.cross(n_hat, vec) for vec in N_j])
                             # TODO: Use the above properly (not being used at all right now for some reason)
+                            dotted = n_hat_x_ni[:, 0] * n_hat_x_nj[:, 0] + n_hat_x_ni[:, 1] * n_hat_x_nj[:, 1] + n_hat_x_ni[:, 2] * n_hat_x_nj[:, 2]
                             ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
+                            dotted = np.reshape(dotted, [len(dotted), 1])
                             # ni_dot_nj = N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2]
-                            integral = quad_eval(nodes[0], nodes[1], nodes[2], ni_dot_nj)
+                            integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
                             self.K[self.remap_edge_nums[self.all_edges_map[edge1]], self.remap_edge_nums[self.all_edges_map[edge2]]] += integral * self.input_port.get_selected_beta() * 1j
 
                     # If working with output port edges, need to do different integral
@@ -228,9 +231,10 @@ class Waveguide3D:
                             N_j[:, 2] = Azk + Bzk * sample_points[:, 0] + Czk * sample_points[:, 1]
                             N_j = N_j * edge2.length / 36 / tet.volume**2
                             n_hat_x_nj = np.array([np.cross(n_hat, vec) for vec in N_j])
-                            # TODO: Use the above properly (not being used at all right now for some reason)
+                            dotted = n_hat_x_ni[:, 0] * n_hat_x_nj[:, 0] + n_hat_x_ni[:, 1] * n_hat_x_nj[:, 1] + n_hat_x_ni[:, 2] * n_hat_x_nj[:, 2]
+                            dotted = np.reshape(dotted, [len(dotted), 1])
                             ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
-                            integral = quad_eval(nodes[0], nodes[1], nodes[2], ni_dot_nj)
+                            integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
                             self.K[self.remap_edge_nums[self.all_edges_map[edge1]], self.remap_edge_nums[self.all_edges_map[edge2]]] += self.output_port.get_selected_beta() * integral * 1j
                     # Otherwise we are working with an inner edge (not on boundary). Do necessary integral.
                     # Currently removing this else unless it is found that it is needed
@@ -252,7 +256,10 @@ class Waveguide3D:
                     I10 = 1/20 * (Cxl*Cxk + Cyl*Cyk) * (sum(zi*zi for xi, yi, zi in tet.points) + 16*z_mean*z_mean)
                     i_sum = I1 + I2 + I3 + I4 + I5 + I6 + I7 + I8 + I9 + I10
                     dot_part = -self.input_port.k0**2 * tet.permittivity * edge1.length * edge2.length / 1296 / tet.volume**3 * i_sum
-                    self.K[self.remap_edge_nums[self.all_edges_map[edge1]], self.remap_edge_nums[self.all_edges_map[edge2]]] += curl_dot_curl_part + dot_part
+                    k_value = curl_dot_curl_part + dot_part
+                    index1 = self.remap_edge_nums[self.all_edges_map[edge1]]
+                    index2 = self.remap_edge_nums[self.all_edges_map[edge2]]
+                    self.K[index1, index2] += k_value
         print("Finished constructing equation matrix")
         print("Solving equation matrix")
         self.edge_coefficients = np.dot(inv(self.K), self.b)
@@ -338,7 +345,12 @@ class Waveguide3D:
 
 
 # waveguide = Waveguide3D("rectangular_waveguide_3d_less_coarse.inp")
-waveguide = Waveguide3D("rectangular_waveguide_20220606.inp")
+# waveguide = Waveguide3D("rectangular_waveguide_20220608.inp")
+waveguide = Waveguide3D("rectangular_waveguide_20220608_coarse.inp")
+# waveguide.input_port.set_mode_index(0)
+# waveguide.input_port.plot_fields()
+start_time = time.time()
 waveguide.solve()
-# for i in range(6):
-#     waveguide.plot_fields(plane="xy", offset=0.1, phase=i*pi/3)
+print(f"Solved in {time.time() - start_time} seconds")
+for i in range(12):
+    waveguide.plot_fields(plane="xy", offset=2, phase=i*pi/6)
