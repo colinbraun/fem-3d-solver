@@ -266,7 +266,7 @@ class Waveguide3D:
         print("Finished solving equation matrix")
         return self.edge_coefficients
 
-    def plot_fields(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1, phase=0.):
+    def plot_fields(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1, phase=0., vmin=None, vmax=None):
         """
         Plot the fields in the selected plane. Note that field plotting is expensive due to needing to locate which
         tetrahedron each point lies in. Finer meshes may need to use fewer sample points.
@@ -329,7 +329,7 @@ class Waveguide3D:
             axis1, axis2 = np.meshgrid(x_points, z_points)
             skip = (slice(None, None, 5), slice(None, None, 5))
             field_skip = (slice(None, None, 5), 0, slice(None, None, 5))
-            plt.imshow(Ey[:, 0, :], extent=[self.x_min, self.x_max, self.z_min, self.z_max], cmap="cividis", vmin=-2.5E-7, vmax=2.5E-7)
+            plt.imshow(Ey[:, 0, :], extent=[self.x_min, self.x_max, self.z_min, self.z_max], cmap="cividis", vmin=vmin, vmax=vmax)
             plt.colorbar(label="Ey")
             # plt.quiver(axis1[skip], axis2[skip], Ex[field_skip], Ez[field_skip], color="black")
         elif plane.upper() == "XY":
@@ -347,7 +347,8 @@ class Waveguide3D:
 # waveguide = Waveguide3D("rectangular_waveguide_3d_less_coarse.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220608.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220608_coarse.inp")
-waveguide = Waveguide3D("rectangular_waveguide_20220615.inp")
+# waveguide = Waveguide3D("rectangular_waveguide_20220615.inp")
+waveguide = Waveguide3D("rectangular_waveguide_finer_20220615.inp")
 # waveguide.input_port.set_mode_index(0)
 # waveguide.input_port.plot_fields()
 start_time = time.time()
@@ -355,6 +356,6 @@ waveguide.solve()
 print(f"Solved in {time.time() - start_time} seconds")
 num_phases = 50
 for i in range(num_phases):
-    waveguide.plot_fields(plane="xz", offset=0.5/2, phase=i*2*pi/num_phases)
+    waveguide.plot_fields(plane="xz", offset=0.5/2, phase=i*2*pi/num_phases, vmin=-2.5E-8, vmax=2.5E-8)
     plt.savefig(f"images/te10_planexz_{floor(i/10)}{i%10}")
     plt.close()
