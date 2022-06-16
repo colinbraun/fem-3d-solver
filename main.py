@@ -31,9 +31,9 @@ class Waveguide3D:
         self.b = np.zeros([len(self.remap_edge_nums)], dtype=complex)
         # Create a Waveguide object of the input port
         self.input_port = Waveguide(filename, ["InputPort"], "InPortBoundary")
-        # Set its mode to be the specified propagating mode (4 -> TM11)
-        self.input_port.set_mode_index(4)
-        # Solve the waveguide for k0 = 4
+        # Set its mode to be the specified propagating mode (0 -> TE10, 4 -> TM11)
+        self.input_port.set_mode_index(0)
+        # Solve the waveguide for k0 = 4 (this will work for TE10 mode excitation, but won't excite other modes)
         self.input_port.solve_k0(4)
         # TODO: Change this to have an output port that differs from the input port. Will have to solve it too.
         self.output_port = self.input_port
@@ -329,9 +329,9 @@ class Waveguide3D:
             axis1, axis2 = np.meshgrid(x_points, z_points)
             skip = (slice(None, None, 5), slice(None, None, 5))
             field_skip = (slice(None, None, 5), 0, slice(None, None, 5))
-            plt.imshow(Ey[:, 0, :], extent=[self.x_min, self.x_max, self.z_min, self.z_max], cmap="cividis")
+            plt.imshow(Ey[:, 0, :], extent=[self.x_min, self.x_max, self.z_min, self.z_max], cmap="cividis", vmin=-2.5E-7, vmax=2.5E-7)
             plt.colorbar(label="Ey")
-            plt.quiver(axis1[skip], axis2[skip], Ex[field_skip], Ez[field_skip], color="black")
+            # plt.quiver(axis1[skip], axis2[skip], Ex[field_skip], Ez[field_skip], color="black")
         elif plane.upper() == "XY":
             axis1, axis2 = np.meshgrid(x_points, y_points)
             skip = (slice(None, None, 5), slice(None, None, 5))
@@ -346,11 +346,15 @@ class Waveguide3D:
 
 # waveguide = Waveguide3D("rectangular_waveguide_3d_less_coarse.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220608.inp")
-waveguide = Waveguide3D("rectangular_waveguide_20220608_coarse.inp")
+# waveguide = Waveguide3D("rectangular_waveguide_20220608_coarse.inp")
+waveguide = Waveguide3D("rectangular_waveguide_20220615.inp")
 # waveguide.input_port.set_mode_index(0)
 # waveguide.input_port.plot_fields()
 start_time = time.time()
 waveguide.solve()
 print(f"Solved in {time.time() - start_time} seconds")
-for i in range(12):
-    waveguide.plot_fields(plane="xy", offset=2, phase=i*pi/6)
+num_phases = 50
+for i in range(num_phases):
+    waveguide.plot_fields(plane="xz", offset=0.5/2, phase=i*2*pi/num_phases)
+    plt.savefig(f"images/te10_planexz_{floor(i/10)}{i%10}")
+    plt.close()
