@@ -356,7 +356,8 @@ waveguide.solve()
 print(f"Solved in {time.time() - start_time} seconds")
 num_phases = 50
 for i in range(num_phases):
-    waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-25E-8, vmax=25E-8)
+    # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-25E-8, vmax=25E-8)
+    waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8)
     plt.savefig(f"images/te10_planexz_y0p25_{floor(i/10)}{i%10}")
     plt.close()
 # for i in range(num_phases):
