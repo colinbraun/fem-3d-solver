@@ -207,7 +207,7 @@ class TetrahedralElement:
                     negate = -1
                 cofactors[col] = negate * np.linalg.det(np.delete(np.delete(np.append(np.ones([4, 1]), self.points, 1), row, axis=0), col, axis=1))
             all_cofactors[row] = cofactors
-        self.simplex_consts = all_cofactors
+        self.simplex_consts = all_cofactors * 6
 
     def interpolate(self, phis, p):
         """
