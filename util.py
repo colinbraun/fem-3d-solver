@@ -12,7 +12,6 @@ class Edge:
         """
         self.node1 = node1
         self.node2 = node2
-        # print(len(Element.all_nodes))
         node1_t, node2_t = TriangleElement.all_nodes[node1], TriangleElement.all_nodes[node2]
         # TODO: Evaluate whether the sign should be considered or not (currently does assign it a sign)
         sign_multiplier = 1 if node1 < node2 else -1
@@ -39,7 +38,6 @@ class Edge:
             hash_value = (self.node1, self.node2).__hash__()
         else:
             hash_value = (self.node2, self.node1).__hash__()
-        # print(f"Hash value: {hash_value}")
         return hash_value
 
 
@@ -47,6 +45,7 @@ class TriangleElement:
     """A class representing a triangular element (containing 3 global node numbers and 3 global edge numbers, as well as a permittivity) """
     all_nodes = []
     all_edges = []
+    all_edges_map = {}
 
     def __init__(self, nodes, edges, permittivity=1):
         """
@@ -113,54 +112,9 @@ class TriangleElement:
         return (n1 + n2 + n3) / 2 / self.area()
 
     def edge_interpolate(self, phi1, phi2, phi3, x, y):
-        area = self.area()
+        # TODO: Replace this with proper code if necessary
         x_component = 0
         y_component = 0
-        phis = [phi1, phi2, phi3]
-        count = 0
-        for edge_number in self.edges:
-            # Generate the edge from 2 of the nodes (done in a CCW fashion by choice of tuples in for loop)
-            edge = TriangleElement.all_edges[edge_number]
-            # TODO: Fix the below statement so that it doesn't print TRUE
-            # if edge != Element.all_edges[self.edges[count]]:
-            #     print("TRUE")
-            # Index of the third node (the one not making up the edge) going in a CCW fashion
-            node1, node2 = edge.node1, edge.node2
-            node3 = set(self.nodes).difference({node1, node2}).pop()
-            n1_index = np.where(self.nodes == node1)[0][0]
-            n2_index = np.where(self.nodes == node2)[0][0]
-            # n2_index = self.nodes.index(node2)
-            # print(str(n1_index[0][0]) + str(n2_index[0][0]))
-            negate = 1
-            # match str(n1_index) + str(n2_index):
-            #     case "01":
-            #         n3_index = 2
-            #     case "02":
-            #         n1_index, n2_index, n3_index, negate = 2, 0, 1, -1
-            #     case "10":
-            #         n1_index, n2_index, n3_index, negate = 0, 1, 2, -1
-            #     case "12":
-            #         n1_index, n2_index, n3_index = 1, 2, 0
-            #     case "20":
-            #         n1_index, n2_index, n3_index = 2, 0, 1
-            #     case "21":
-            #         n1_index, n2_index, n3_index, negate = 1, 2, 0, -1
-
-            # Create the ccw node list started from the first node of the edge
-            nodes_lk = (TriangleElement.all_nodes[self.nodes[n1_index]], TriangleElement.all_nodes[self.nodes[n2_index]], TriangleElement.all_nodes[self.nodes[n3_index]])
-
-            a_i_l, a_j_l = nodes_lk[1][0] * nodes_lk[2][1] - nodes_lk[2][0] * nodes_lk[1][1], nodes_lk[2][0] * nodes_lk[0][1] - nodes_lk[0][0] * nodes_lk[2][1]
-            b_i_l, b_j_l = nodes_lk[1][1] - nodes_lk[2][1], nodes_lk[2][1] - nodes_lk[0][1]
-            c_i_l, c_j_l = nodes_lk[2][0] - nodes_lk[1][0], nodes_lk[0][0] - nodes_lk[2][0]
-
-            A_l = a_i_l * b_j_l - a_j_l * b_i_l
-            B_l = c_i_l * b_j_l - c_j_l * b_i_l
-            C_l = a_i_l * c_j_l - a_j_l * c_i_l
-            D_l = b_i_l * c_j_l - b_j_l * c_i_l
-
-            x_component += phis[count] * negate * edge.length / 4 / area**2 * (A_l + B_l*y)
-            y_component += phis[count] * negate * edge.length / 4 / area**2 * (C_l + D_l*x)
-            count += 1
         return x_component, y_component
 
     def __eq__(self, other):
@@ -172,25 +126,35 @@ class TriangleElement:
 class TetrahedralElement:
     """Class representing a tetrahedral (3D) element consisting of 4 TriangularElement objects"""
 
-    def __init__(self, edges, permittivity=1):
+    def __init__(self, nodes, permittivity=1):
         """
-
-        :param edges: A numpy array containing the 6 edges (as global edge numbers) of the tetrahedral element
-        :param permittivity: The permittivity of this element
+        Constructor.
+        :param nodes: A numpy array containing the 4 nodes (as global node numbers) of the tetrahedral element. The
+        nodes must ordered such that the calculated volume is positive (Cubit orders the nodes this way automatically).
+        :param permittivity: The permittivity of this element.
         """
-        self.edges = edges
+        self.nodes = nodes
+        # Generate the edges:
+        edge1 = TriangleElement.all_edges_map[Edge(nodes[0], nodes[1])]
+        edge2 = TriangleElement.all_edges_map[Edge(nodes[0], nodes[2])]
+        edge3 = TriangleElement.all_edges_map[Edge(nodes[0], nodes[3])]
+        edge4 = TriangleElement.all_edges_map[Edge(nodes[1], nodes[2])]
+        edge5 = TriangleElement.all_edges_map[Edge(nodes[1], nodes[3])]
+        edge6 = TriangleElement.all_edges_map[Edge(nodes[2], nodes[3])]
+        self.edges = np.array([edge1, edge2, edge3, edge4, edge5, edge6])
         self.permittivity = permittivity
-        # Store the unique set of points that make up this tetrahedron in no particular order
-        self.nodes = np.unique(np.array([edge.node1 for edge in [TriangleElement.all_edges[i] for i in edges]] + [edge.node2 for edge in [TriangleElement.all_edges[i] for i in edges]], dtype=np.int32))
-        # Convert the nodes from global node numbers to (x, y) coordinates
+        # Store the unique set of points that make up this tetrahedron
         self.points = TriangleElement.all_nodes[self.nodes]
         # Volume calculated using eq (157) in NASA paper
         mat = [[1, self.points[0][0], self.points[0][1], self.points[0][2]],
                [1, self.points[1][0], self.points[1][1], self.points[1][2]],
                [1, self.points[2][0], self.points[2][1], self.points[2][2]],
                [1, self.points[3][0], self.points[3][1], self.points[3][2]]]
-        # This could be a method, but is frequently and always used.
-        self.volume = abs(np.linalg.det(mat) / 6)
+        # This could be a method, but is frequently used.
+        self.volume = np.linalg.det(mat)
+        if self.volume < 0:
+            raise RuntimeError("Computed volume was negative but should have been positive")
+
         # Compute the simplex (barycentric) constants for the nodes of this TetrahedralElement
         # Each row is for a node. Each column is for a, b, c, and d (in order) from NASA paper eq. 162
         # These are stored in the same order as self.nodes (i.e. simplex_consts[0] are the constants for self.nodes[0])
@@ -329,6 +293,7 @@ def load_mesh(filename):
     TriangleElement.all_edges = all_edges
     # A temporary map from an edge object to its global edge number (MUCH lower computational complexity)
     all_edges_map = {}
+    TriangleElement.all_edges_map = all_edges_map
     # Keep track of what edge number we are on
     edge_count = 0
 
@@ -361,8 +326,8 @@ def load_mesh(filename):
             tet_edges.add(edge1_number)
             tet_edges.add(edge2_number)
             tet_edges.add(edge3_number)
-        # Create the tetrahedron object, converting the global edge numbers set to a numpy array
-        tetrahedrons.append(TetrahedralElement(np.array(np.array(list(tet_edges)))))
+        # Create the tetrahedron object, converting the global node numbers set to a numpy array
+        tetrahedrons.append(TetrahedralElement(tet))
 
     # Convert tetrahedrons to numpy array
     all_tets = np.array(tetrahedrons)
