@@ -39,6 +39,8 @@ class Waveguide3D:
         self.output_port = self.input_port
         # Create an empty coefficient array. This is loaded by solve()
         self.edge_coefficients = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)])
+        # Placeholders
+        self.Ex, self.Ey, self.Ez = None, None, None
 
     def solve(self):
         """
@@ -266,16 +268,121 @@ class Waveguide3D:
         print("Finished solving equation matrix")
         return self.edge_coefficients
 
-    def plot_fields(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1, phase=0., vmin=None, vmax=None):
+    def compute_s11(self):
         """
-        Plot the fields in the selected plane. Note that field plotting is expensive due to needing to locate which
-        tetrahedron each point lies in. Finer meshes may need to use fewer sample points.
+        Integrate the input port, generating the S11 value.
+        :return: The evaluated S-parameter.
+        """
+        integral1 = 0
+        integral2 = 0
+        for tet in self.boundary_input_tets:
+            # Need the third point that makes up the face of the input port
+            found_edge_nos = []
+            # Search for a different edge on the input port from this tetrahedral element
+            for edge in tet.edges:
+                if edge in self.boundary_input_edge_numbers:
+                    # We found an edge containing the third node, note it
+                    found_edge_nos.append(edge)
+                if len(found_edge_nos) == 2:
+                    break
+            # It is possible we do not find another edge that lies on the input port. We are checking for this here.
+            if len(found_edge_nos) == 2:
+                found_edge1 = self.all_edges[found_edge_nos[0]]
+                found_edge2 = self.all_edges[found_edge_nos[1]]
+                nodes = np.unique(np.array([self.all_nodes[found_edge1.node1], self.all_nodes[found_edge1.node2],
+                                            self.all_nodes[found_edge2.node1], self.all_nodes[found_edge2.node2]]),
+                                  axis=0)
+                if len(nodes) != 3:
+                    raise RuntimeError("Did not find 3 nodes on surface triangle")
+                # Perform the integral for the surface using gaussian quadrature
+                sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
+                phis = [self.edge_coefficients[self.remap_edge_nums[edge]] if edge in self.remap_edge_nums else 0 for
+                        edge in tet.edges]
+                Ec = np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points]) * 355930.4141525958
+                # N_i = np.zeros([len(sample_points), 3])
+                # N_i[:, 0] = Axl + Bxl * sample_points[:, 1] + Cxl * sample_points[:, 2]
+                # N_i[:, 1] = Ayl + Byl * sample_points[:, 0] + Cyl * sample_points[:, 2]
+                # N_i[:, 2] = Azl + Bzl * sample_points[:, 0] + Czl * sample_points[:, 1]
+                # N_i = np.array([tet.interpolate([1] * 6, sample_point) for sample_point in sample_points])
+                # Compute the x component of the edge interpolating function for each of the sample points
+                # Get the E_inc field at each of the sample points
+                E1 = np.array(
+                    [np.array(self.input_port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
+                     sample_points])
+                Ec = Ec - E1
+                E1_conj = np.conjugate(E1)
+                # Compute the dot product at each point
+                values1 = np.reshape(Ec[:, 0] * E1[:, 0] + Ec[:, 1] * E1[:, 1] + Ec[:, 2] * E1[:, 2],
+                                    [len(sample_points), 1])
+                values2 = np.reshape(E1[:, 0] * E1_conj[:, 0] + E1[:, 1] * E1_conj[:, 1] + E1[:, 2] * E1_conj[:, 2],
+                                     [len(sample_points), 1])
+                integral1 += quad_eval(nodes[0], nodes[1], nodes[2], values1)
+                integral2 += quad_eval(nodes[0], nodes[1], nodes[2], values2)
+            else:
+                raise RuntimeError("Did not find boundary face of boundary tetrahedron")
+        return integral1 / integral2
+
+    def compute_s21(self):
+        """
+        Compute the S21 value.
+        :return: The S21 value.
+        """
+        integral1 = 0
+        integral2 = 0
+        for tet in self.boundary_output_tets:
+            # Need the third point that makes up the face of the input port
+            found_edge_nos = []
+            # Search for a different edge on the input port from this tetrahedral element
+            for edge in tet.edges:
+                if edge in self.boundary_output_edge_numbers:
+                    # We found an edge containing the third node, note it
+                    found_edge_nos.append(edge)
+                if len(found_edge_nos) == 2:
+                    break
+            # It is possible we do not find another edge that lies on the input port. We are checking for this here.
+            if len(found_edge_nos) == 2:
+                found_edge1 = self.all_edges[found_edge_nos[0]]
+                found_edge2 = self.all_edges[found_edge_nos[1]]
+                nodes = np.unique(np.array([self.all_nodes[found_edge1.node1], self.all_nodes[found_edge1.node2],
+                                            self.all_nodes[found_edge2.node1], self.all_nodes[found_edge2.node2]]),
+                                  axis=0)
+                if len(nodes) != 3:
+                    raise RuntimeError("Did not find 3 nodes on surface triangle")
+                # Perform the integral for the surface using gaussian quadrature
+                sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
+                phis = [self.edge_coefficients[self.remap_edge_nums[edge]] if edge in self.remap_edge_nums else 0 for
+                        edge in tet.edges]
+                Ec = np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points])
+                # N_i = np.zeros([len(sample_points), 3])
+                # N_i[:, 0] = Axl + Bxl * sample_points[:, 1] + Cxl * sample_points[:, 2]
+                # N_i[:, 1] = Ayl + Byl * sample_points[:, 0] + Cyl * sample_points[:, 2]
+                # N_i[:, 2] = Azl + Bzl * sample_points[:, 0] + Czl * sample_points[:, 1]
+                # N_i = np.array([tet.interpolate([1] * 6, sample_point) for sample_point in sample_points])
+                # Compute the x component of the edge interpolating function for each of the sample points
+                # Get the E_inc field at each of the sample points
+                E1 = np.array(
+                    [np.array(self.output_port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
+                     sample_points])
+                E1_conj = np.conjugate(E1)
+                # Compute the dot product at each point
+                values1 = np.reshape(Ec[:, 0] * E1[:, 0] + Ec[:, 1] * E1[:, 1] + Ec[:, 2] * E1[:, 2],
+                                     [len(sample_points), 1])
+                values2 = np.reshape(E1[:, 0] * E1_conj[:, 0] + E1[:, 1] * E1_conj[:, 1] + E1[:, 2] * E1_conj[:, 2],
+                                     [len(sample_points), 1])
+                integral1 += quad_eval(nodes[0], nodes[1], nodes[2], values1)
+                integral2 += quad_eval(nodes[0], nodes[1], nodes[2], values2)
+            else:
+                raise RuntimeError("Did not find boundary face of boundary tetrahedron")
+        return integral1 / integral2
+
+    def get_fields_in_plane(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1):
+        """
+        Compute the fields in the specified plane.
         :param num_axis1_points: The number of points to compute the fields for along the first axis in the plane.
         :param num_axis2_points: The number of y points to compute the fields for along the second axis in the plane.
         :param plane: One of {"xy", "xz", "yz"} to select which plane to take a cut of.
         :param offset: The offset from the edge of the geometry in the direction perpendicular to the plane to calc at.
-        :param phase: The phase in radians to calculate the fields at.
-        :return: The figure containing all the field data (the result of running plt.figure()).
+        :return: Ex, Ey, and Ez, indexed by [z, y, x]. (One of these indices will only allow for the value 0).
         """
         print("Calculating field data")
         # Compute the bounds of the waveguide
@@ -284,9 +391,9 @@ class Waveguide3D:
         y_points = [self.y_min+offset] if plane.upper() == "XZ" else np.linspace(self.y_min, self.y_max, num_axis1_points if plane.upper() == "YZ" else num_axis2_points)
         z_points = [self.z_min+offset] if plane.upper() == "XY" else np.linspace(self.z_min, self.z_max, num_axis2_points)
         num_x_points, num_y_points, num_z_points = len(x_points), len(y_points), len(z_points)
-        Ex = np.zeros([num_z_points, num_y_points, num_x_points])
-        Ey = np.zeros([num_z_points, num_y_points, num_x_points])
-        Ez = np.zeros([num_z_points, num_y_points, num_x_points])
+        Ex = np.zeros([num_z_points, num_y_points, num_x_points], dtype=complex)
+        Ey = np.zeros([num_z_points, num_y_points, num_x_points], dtype=complex)
+        Ez = np.zeros([num_z_points, num_y_points, num_x_points], dtype=complex)
 
         field_points = np.zeros([num_x_points * num_y_points * num_z_points, 3])
         # Iterate over the points
@@ -301,7 +408,6 @@ class Waveguide3D:
         # Find which tetrahedron each point lies in
         tet_indices = where(self.all_nodes, self.tets_node_ids, field_points)
 
-        shift = e**(1j*phase)
         # Compute the field at each of the points
         for i, tet_index in enumerate(tet_indices):
             tet = self.tetrahedrons[tet_index]
@@ -312,10 +418,30 @@ class Waveguide3D:
             # Note the indexing here is done with z_i first, y_i second, and x_i third. If we consider a 2D grid being
             # indexed, the first index corresponds to the row (vertical control), hence y_i second and x_i third.
             # Same idea applies to having z_i first.
-            Ex[z_i, y_i, x_i], Ey[z_i, y_i, x_i], Ez[z_i, y_i, x_i] = np.real(np.multiply(tet.interpolate(phis, field_points[i]), shift))
+            Ex[z_i, y_i, x_i], Ey[z_i, y_i, x_i], Ez[z_i, y_i, x_i] = tet.interpolate(phis, field_points[i])
 
         print("Finished calculating field data")
+        return Ex, Ey, Ez
 
+    def plot_fields(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1, phase=0., vmin=None, vmax=None, use_cached_fields=False):
+        """
+        Plot the fields in the selected plane. Note that field plotting is expensive due to needing to locate which
+        tetrahedron each point lies in. Finer meshes may need to use fewer sample points.
+        :param num_axis1_points: The number of points to compute the fields for along the first axis in the plane.
+        :param num_axis2_points: The number of y points to compute the fields for along the second axis in the plane.
+        :param plane: One of {"xy", "xz", "yz"} to select which plane to take a cut of.
+        :param offset: The offset from the edge of the geometry in the direction perpendicular to the plane to calc at.
+        :param phase: The phase in radians to calculate the fields at.
+        :param use_cached_fields: If ``True``, do not recompute the fields, just apply the phase and plot the result.
+        :return: The figure containing all the field data (the result of running plt.figure()).
+        """
+        x_points = [self.x_min+offset] if plane.upper() == "YZ" else np.linspace(self.x_min, self.x_max, num_axis1_points)
+        y_points = [self.y_min+offset] if plane.upper() == "XZ" else np.linspace(self.y_min, self.y_max, num_axis1_points if plane.upper() == "YZ" else num_axis2_points)
+        z_points = [self.z_min+offset] if plane.upper() == "XY" else np.linspace(self.z_min, self.z_max, num_axis2_points)
+        if not use_cached_fields or self.Ex is None or self.Ey is None or self.Ez is None:
+            self.Ex, self.Ey, self.Ez = self.get_fields_in_plane(num_axis1_points, num_axis2_points, plane, offset)
+        phase_shift = e**(1j*phase)
+        Ex, Ey, Ez = np.real(phase_shift*self.Ex), np.real(phase_shift*self.Ey), np.real(phase_shift*self.Ez)
         fig = plt.figure()
         plt.title(f"Fields in {plane.upper()}-plane, offset = {round(offset, 3)}")
         if plane.upper() == "YZ":
@@ -354,29 +480,41 @@ waveguide = Waveguide3D("rectangular_waveguide_finer_20220615.inp")
 start_time = time.time()
 waveguide.solve()
 print(f"Solved in {time.time() - start_time} seconds")
-num_phases = 50
-for i in range(num_phases):
-    # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-25E-8, vmax=25E-8)
-    waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8)
-    plt.savefig(f"images/te10_planexz_y0p25_{floor(i/10)}{i%10}")
-    plt.close()
+s11 = waveguide.compute_s11()
+s21 = waveguide.compute_s21()
+# num_phases = 50
 # for i in range(num_phases):
-#     waveguide.plot_fields(plane="xz", offset=0.1, phase=i*2*pi/num_phases, vmin=-18E-8, vmax=18E-8)
+#     waveguide.plot_fields(plane="xy", offset=1.75/2, phase=i*2*pi/num_phases, use_cached_fields=True)
+#     plt.savefig(f"images/te10_planexy_{floor(i/10)}{i%10}")
+#     plt.close()
+# for i in range(num_phases):
+#     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-25E-8, vmax=25E-8)
+#     waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
+#     plt.savefig(f"images/te10_planexz_y0p25_{floor(i/10)}{i%10}")
+#     plt.close()
+# waveguide.Ex = None
+# for i in range(num_phases):
+#     waveguide.plot_fields(plane="xz", offset=0.1, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
 #     plt.savefig(f"images/te10_planexz_y0p1_{floor(i/10)}{i%10}")
 #     plt.close()
+# waveguide.Ex = None
 # for i in range(num_phases):
-#     waveguide.plot_fields(plane="xz", offset=0.2, phase=i*2*pi/num_phases, vmin=-18E-8, vmax=18E-8)
+#     waveguide.plot_fields(plane="xz", offset=0.2, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
 #     plt.savefig(f"images/te10_planexz_y0p2_{floor(i/10)}{i%10}")
 #     plt.close()
+# waveguide.Ex = None
 # for i in range(num_phases):
-#     waveguide.plot_fields(plane="xz", offset=0.3, phase=i*2*pi/num_phases, vmin=-18E-8, vmax=18E-8)
+#     waveguide.plot_fields(plane="xz", offset=0.3, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
 #     plt.savefig(f"images/te10_planexz_y0p3_{floor(i/10)}{i%10}")
 #     plt.close()
+# waveguide.Ex = None
 # for i in range(num_phases):
-#     waveguide.plot_fields(plane="xz", offset=0.4, phase=i*2*pi/num_phases, vmin=-18E-8, vmax=18E-8)
+#     waveguide.plot_fields(plane="xz", offset=0.4, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
 #     plt.savefig(f"images/te10_planexz_y0p4_{floor(i/10)}{i%10}")
 #     plt.close()
+# waveguide.Ex = None
 # for i in range(num_phases):
-#     waveguide.plot_fields(plane="xz", offset=0.5, phase=i*2*pi/num_phases, vmin=-18E-8, vmax=18E-8)
+#     waveguide.plot_fields(plane="xz", offset=0.5, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
 #     plt.savefig(f"images/te10_planexz_y0p5_{floor(i/10)}{i%10}")
 #     plt.close()
+print("Done creating plots")
