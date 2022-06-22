@@ -63,8 +63,6 @@ class Waveguide3D:
                     continue
                 # Get a hold of the Edge object
                 edge1 = self.all_edges[edgei]
-                # Get the nodes that make up this edge
-                node_il, node_jl = self.all_nodes[edge1.node1], self.all_nodes[edge1.node2]
 
                 indices_l = [np.argwhere(tet.nodes == edge1.node1)[0][0], np.argwhere(tet.nodes == edge1.node2)[0][0]]
                 # The simplex constants for nodes i and j of edge l
@@ -268,9 +266,9 @@ class Waveguide3D:
         print("Finished solving equation matrix")
         return self.edge_coefficients
 
-    def compute_s11(self):
+    def compute_s11_old(self):
         """
-        Integrate the input port, generating the S11 value.
+        Compute S11 using the incident field directly from the FEM inhomogeneous waveguide code.
         :return: The evaluated S-parameter.
         """
         integral1 = 0
@@ -298,25 +296,79 @@ class Waveguide3D:
                 sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
                 phis = [self.edge_coefficients[self.remap_edge_nums[edge]] if edge in self.remap_edge_nums else 0 for
                         edge in tet.edges]
-                Ec = np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points]) * 355930.4141525958
-                # N_i = np.zeros([len(sample_points), 3])
-                # N_i[:, 0] = Axl + Bxl * sample_points[:, 1] + Cxl * sample_points[:, 2]
-                # N_i[:, 1] = Ayl + Byl * sample_points[:, 0] + Cyl * sample_points[:, 2]
-                # N_i[:, 2] = Azl + Bzl * sample_points[:, 0] + Czl * sample_points[:, 1]
-                # N_i = np.array([tet.interpolate([1] * 6, sample_point) for sample_point in sample_points])
-                # Compute the x component of the edge interpolating function for each of the sample points
-                # Get the E_inc field at each of the sample points
+                Ec = np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points])
                 E1 = np.array(
                     [np.array(self.input_port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
                      sample_points])
-                Ec = Ec - E1
+                Ec_m_E1 = Ec - E1
                 E1_conj = np.conjugate(E1)
                 # Compute the dot product at each point
-                values1 = np.reshape(Ec[:, 0] * E1[:, 0] + Ec[:, 1] * E1[:, 1] + Ec[:, 2] * E1[:, 2],
-                                    [len(sample_points), 1])
+                values1 = np.reshape(Ec_m_E1[:, 0] * E1[:, 0] + Ec_m_E1[:, 1] * E1[:, 1] + Ec_m_E1[:, 2] * E1[:, 2],
+                                     [len(sample_points), 1])
+                # Compute the dot product at each point
                 values2 = np.reshape(E1[:, 0] * E1_conj[:, 0] + E1[:, 1] * E1_conj[:, 1] + E1[:, 2] * E1_conj[:, 2],
                                      [len(sample_points), 1])
+                # Compute the integral in the numerator using quadrature
                 integral1 += quad_eval(nodes[0], nodes[1], nodes[2], values1)
+                # Compute the integral in the denominator using quadrature
+                integral2 += quad_eval(nodes[0], nodes[1], nodes[2], values2)
+            else:
+                raise RuntimeError("Did not find boundary face of boundary tetrahedron")
+        return integral1 / integral2
+
+    def compute_s11(self):
+        """
+        Integrate the input port, generating the S11 value.
+        :return: The evaluated S-parameter.
+        """
+        integral1 = 0
+        integral2 = 0
+        for tet in self.boundary_input_tets:
+            # Want to collect 2 edges that lie on the surface to find the 3 nodes that make it up
+            found_edge_nos = []
+            for edge in tet.edges:
+                if edge in self.boundary_input_edge_numbers:
+                    # We found an edge containing the third node, note it
+                    found_edge_nos.append(edge)
+                # Once 2 edges have been found, stop searching
+                if len(found_edge_nos) == 2:
+                    break
+            # This should always be True, but check just in case.
+            if len(found_edge_nos) == 2:
+                found_edge1 = self.all_edges[found_edge_nos[0]]
+                found_edge2 = self.all_edges[found_edge_nos[1]]
+                # Get the 3 nodes that make up the triangle on the surface
+                nodes = np.unique(np.array([self.all_nodes[found_edge1.node1], self.all_nodes[found_edge1.node2],
+                                            self.all_nodes[found_edge2.node1], self.all_nodes[found_edge2.node2]]),
+                                  axis=0)
+                # Ensure 3 were found
+                if len(nodes) != 3:
+                    raise RuntimeError("Did not find 3 nodes on surface triangle")
+                # -------------Perform quadrature on the 3 nodes that make up the triangle on the surface-----------
+                # Generate the points to sample at for the quadrature
+                sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
+                # Get the edge coefficients for each of the edges that make up this tetrahedron
+                phis = [self.edge_coefficients[self.remap_edge_nums[edge]] if edge in self.remap_edge_nums else 0 for
+                        edge in tet.edges]
+                # Interpolate the field measured at the input port (if no reflection, should be similar to incident field used in excitation)
+                Ec = np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points])
+                # Get the edge coefficients that correspond to the incident field (b vector)
+                phis = [self.b[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
+                # Interpolate the incident field at the input port (if no reflection, should be similar to the solution vector results)
+                E1 = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
+                # Ec - E1 for use in the integral
+                Ec_m_E1 = Ec - E1
+                # Get the complex conjugate of the incident field
+                E1_conj = np.conjugate(E1)
+                # Compute the dot product at each point
+                values1 = np.reshape(Ec_m_E1[:, 0] * E1[:, 0] + Ec_m_E1[:, 1] * E1[:, 1] + Ec_m_E1[:, 2] * E1[:, 2],
+                                     [len(sample_points), 1])
+                # Compute the dot product at each point
+                values2 = np.reshape(E1[:, 0] * E1_conj[:, 0] + E1[:, 1] * E1_conj[:, 1] + E1[:, 2] * E1_conj[:, 2],
+                                     [len(sample_points), 1])
+                # Compute the integral in the numerator using quadrature
+                integral1 += quad_eval(nodes[0], nodes[1], nodes[2], values1)
+                # Compute the integral in the denominator using quadrature
                 integral2 += quad_eval(nodes[0], nodes[1], nodes[2], values2)
             else:
                 raise RuntimeError("Did not find boundary face of boundary tetrahedron")
@@ -330,46 +382,53 @@ class Waveguide3D:
         integral1 = 0
         integral2 = 0
         for tet in self.boundary_output_tets:
-            # Need the third point that makes up the face of the input port
+            # Want to collect 2 edges that lie on the surface to find the 3 nodes that make it up
             found_edge_nos = []
-            # Search for a different edge on the input port from this tetrahedral element
             for edge in tet.edges:
-                if edge in self.boundary_output_edge_numbers:
+                if edge in self.boundary_input_edge_numbers:
                     # We found an edge containing the third node, note it
                     found_edge_nos.append(edge)
+                # Once 2 edges have been found, stop searching
                 if len(found_edge_nos) == 2:
                     break
-            # It is possible we do not find another edge that lies on the input port. We are checking for this here.
+            # This should always be True, but check just in case.
             if len(found_edge_nos) == 2:
                 found_edge1 = self.all_edges[found_edge_nos[0]]
                 found_edge2 = self.all_edges[found_edge_nos[1]]
+                # Get the 3 nodes that make up the triangle on the surface
                 nodes = np.unique(np.array([self.all_nodes[found_edge1.node1], self.all_nodes[found_edge1.node2],
                                             self.all_nodes[found_edge2.node1], self.all_nodes[found_edge2.node2]]),
                                   axis=0)
+                # Ensure 3 were found
                 if len(nodes) != 3:
                     raise RuntimeError("Did not find 3 nodes on surface triangle")
-                # Perform the integral for the surface using gaussian quadrature
+                # -------------Perform quadrature on the 3 nodes that make up the triangle on the surface-----------
+                # Generate the points to sample at for the quadrature
                 sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
+                # Get the edge coefficients for each of the edges that make up this tetrahedron
                 phis = [self.edge_coefficients[self.remap_edge_nums[edge]] if edge in self.remap_edge_nums else 0 for
                         edge in tet.edges]
+                # Interpolate the field measured at the input port (if no reflection, should be similar to incident field used in excitation)
                 Ec = np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points])
-                # N_i = np.zeros([len(sample_points), 3])
-                # N_i[:, 0] = Axl + Bxl * sample_points[:, 1] + Cxl * sample_points[:, 2]
-                # N_i[:, 1] = Ayl + Byl * sample_points[:, 0] + Cyl * sample_points[:, 2]
-                # N_i[:, 2] = Azl + Bzl * sample_points[:, 0] + Czl * sample_points[:, 1]
-                # N_i = np.array([tet.interpolate([1] * 6, sample_point) for sample_point in sample_points])
-                # Compute the x component of the edge interpolating function for each of the sample points
+                # OLD WAY, USING b VECTOR APPROACH NOW
                 # Get the E_inc field at each of the sample points
-                E1 = np.array(
-                    [np.array(self.output_port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
-                     sample_points])
+                # E1 = np.array(
+                #     [np.array(self.output_port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
+                #      sample_points])
+                # Get the edge coefficients that correspond to the incident field (b vector)
+                phis = [self.b[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
+                # Interpolate the incident field at the input port (if no reflection, should be similar to the solution vector results)
+                E1 = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
                 E1_conj = np.conjugate(E1)
                 # Compute the dot product at each point
                 values1 = np.reshape(Ec[:, 0] * E1[:, 0] + Ec[:, 1] * E1[:, 1] + Ec[:, 2] * E1[:, 2],
                                      [len(sample_points), 1])
+                # Compute the dot product at each point
                 values2 = np.reshape(E1[:, 0] * E1_conj[:, 0] + E1[:, 1] * E1_conj[:, 1] + E1[:, 2] * E1_conj[:, 2],
                                      [len(sample_points), 1])
+                # Compute the integral in the numerator using quadrature
                 integral1 += quad_eval(nodes[0], nodes[1], nodes[2], values1)
+                # Compute the integral in the denominator using quadrature
                 integral2 += quad_eval(nodes[0], nodes[1], nodes[2], values2)
             else:
                 raise RuntimeError("Did not find boundary face of boundary tetrahedron")
