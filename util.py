@@ -204,6 +204,32 @@ class TetrahedralElement:
             z_component += phis[i] * edge.length / 36 / self.volume**2 * (Azl + Bzl*p[0] + Czl*p[1])
         return x_component, y_component, z_component
 
+    def point_inside(self, point):
+        """
+        Determine if the given point lies in this tetrahedron (expensive).
+        :param point: The point to check against.
+        :return: True if the point lies in the tetrahedron, false otherwise
+        """
+        m0 = np.array([[self.points[0][0], self.points[0][1], self.points[0][2], 1],
+                       [self.points[1][0], self.points[1][1], self.points[1][2], 1],
+                       [self.points[2][0], self.points[2][1], self.points[2][2], 1],
+                       [self.points[3][0], self.points[3][1], self.points[3][2], 1]])
+        m1 = np.copy(m0)
+        m2 = np.copy(m0)
+        m3 = np.copy(m0)
+        m4 = np.copy(m0)
+        m1[0, 0:3] = point
+        m2[1, 0:3] = point
+        m3[2, 0:3] = point
+        m4[3, 0:3] = point
+        d0, d1, d2, d3, d4 = np.linalg.det(m0), np.linalg.det(m1), np.linalg.det(m2), np.linalg.det(m3), np.linalg.det(
+            m4)
+        total = int(d0 > 0) + int(d1 > 0) + int(d2 > 0) + int(d3 > 0) + int(d4 > 0)
+        if total == 5 or total == 0:
+            return True
+        else:
+            return False
+
 
 def construct_triangles_from_surface(element_to_node_conn, all_edges_map):
     """

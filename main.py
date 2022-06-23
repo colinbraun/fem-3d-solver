@@ -374,7 +374,7 @@ class Waveguide3D:
                 raise RuntimeError("Did not find boundary face of boundary tetrahedron")
         return integral1 / integral2
 
-    def compute_s21(self):
+    def compute_s21(self, phase=0):
         """
         Compute the S21 value.
         :return: The S21 value.
@@ -385,7 +385,7 @@ class Waveguide3D:
             # Want to collect 2 edges that lie on the surface to find the 3 nodes that make it up
             found_edge_nos = []
             for edge in tet.edges:
-                if edge in self.boundary_input_edge_numbers:
+                if edge in self.boundary_output_edge_numbers:
                     # We found an edge containing the third node, note it
                     found_edge_nos.append(edge)
                 # Once 2 edges have been found, stop searching
@@ -409,7 +409,8 @@ class Waveguide3D:
                 phis = [self.edge_coefficients[self.remap_edge_nums[edge]] if edge in self.remap_edge_nums else 0 for
                         edge in tet.edges]
                 # Interpolate the field measured at the input port (if no reflection, should be similar to incident field used in excitation)
-                Ec = np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points])
+                ps = e**(1j*phase)
+                Ec = ps * np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points])
                 # OLD WAY, USING b VECTOR APPROACH NOW
                 # Get the E_inc field at each of the sample points
                 # E1 = np.array(
@@ -418,7 +419,8 @@ class Waveguide3D:
                 # Get the edge coefficients that correspond to the incident field (b vector)
                 phis = [self.b[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
                 # Interpolate the incident field at the input port (if no reflection, should be similar to the solution vector results)
-                E1 = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
+                # E1 = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
+                E1 = np.array([self.get_incident_profile_at(sample_point) for sample_point in sample_points])
                 E1_conj = np.conjugate(E1)
                 # Compute the dot product at each point
                 values1 = np.reshape(Ec[:, 0] * E1[:, 0] + Ec[:, 1] * E1[:, 1] + Ec[:, 2] * E1[:, 2],
@@ -433,6 +435,24 @@ class Waveguide3D:
             else:
                 raise RuntimeError("Did not find boundary face of boundary tetrahedron")
         return integral1 / integral2
+
+    def get_incident_profile_at(self, p):
+        """
+        Compute the incident field at a particular point, based on the xy plane. Assumes input port lies in xy plane.
+        :param p: The point as a vector containing (x, y, z).
+        :return: Ex, Ey, and Ez at that point.
+        """
+        # Find which tetrahedron this point lies in
+        p[2] = self.z_max-1E-6
+        for tet in self.boundary_input_tets:
+            if tet.point_inside(p):
+                p[2] = 0
+                phis = [self.b[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
+                # Interpolate the incident field at the input port (if no reflection, should be similar to the solution vector results)
+                E1 = np.array(tet.interpolate(phis, p))
+                # print("Yes")
+                return E1
+        raise RuntimeError(f"Did not find a tetrahedron that point ({p[0]}, {p[1]}, {p[2]}) lied in.")
 
     def get_fields_in_plane(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1):
         """
@@ -534,6 +554,7 @@ class Waveguide3D:
 # waveguide = Waveguide3D("rectangular_waveguide_20220608_coarse.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220615.inp")
 waveguide = Waveguide3D("rectangular_waveguide_finer_20220615.inp")
+# waveguide = Waveguide3D("rectangular_waveguide_20220622_40000tets.inp")
 # waveguide.input_port.set_mode_index(0)
 # waveguide.input_port.plot_fields()
 start_time = time.time()
