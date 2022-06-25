@@ -230,6 +230,15 @@ class TetrahedralElement:
         else:
             return False
 
+    def __eq__(self, other):
+        """Override == operator. Two ``TetrahedralElement`` objects are equal if their global node numbers match."""
+        return np.array_equal(self.nodes, other.nodes)
+
+    def __hash__(self):
+        """Override (implement) hashing based on global node numbers that make up this element."""
+        # Nodes must be sorted
+        return hash(tuple(np.sort(self.nodes)))
+
 
 def construct_triangles_from_surface(element_to_node_conn, all_edges_map):
     """

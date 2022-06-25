@@ -3,7 +3,7 @@ import numpy as np
 from iwaveguide.waveguide import Waveguide
 from scipy.linalg import inv
 import matplotlib.pyplot as plt
-from math import floor, e, pi
+from math import floor, e, pi, atan
 import time
 
 # Turn on interactive plotting
@@ -42,12 +42,15 @@ class Waveguide3D:
         # Placeholders
         self.Ex, self.Ey, self.Ez = None, None, None
 
-    def solve(self):
+    def solve(self, mode=0):
         """
         Solve for the fields in the Waveguide3D object.
+        :param mode: The mode to excite at the input port. Default = 0 (lowest cut-off frequency mode).
         :return: The edge coefficients to be applied to the interpolating functions (indexed by global edge number).
         """
         print("Begin constructing equation matrix")
+        # Create the b vector
+        self.b = self.generate_b_vector(self.input_port, mode)
         # Iterate over the tetrahedrons and construct the K and b matrices (this concept comes from Jin page 454)
         for tet in self.tetrahedrons:
 
@@ -64,8 +67,8 @@ class Waveguide3D:
                 # Get a hold of the Edge object
                 edge1 = self.all_edges[edgei]
 
-                indices_l = [np.argwhere(tet.nodes == edge1.node1)[0][0], np.argwhere(tet.nodes == edge1.node2)[0][0]]
                 # The simplex constants for nodes i and j of edge l
+                indices_l = [np.argwhere(tet.nodes == edge1.node1)[0][0], np.argwhere(tet.nodes == edge1.node2)[0][0]]
                 # Necessary constants from NASA paper eqs. 163-172
                 a_il, a_jl = tet.simplex_consts[indices_l]
                 Axl = a_il[0]*a_jl[1] - a_il[1]*a_jl[0]
@@ -77,42 +80,6 @@ class Waveguide3D:
                 Azl = a_il[0]*a_jl[3] - a_il[3]*a_jl[0]
                 Bzl = a_il[1]*a_jl[3] - a_il[3]*a_jl[1]
                 Czl = a_il[2]*a_jl[3] - a_il[3]*a_jl[2]
-                # If we have an input port edge, we might need to perform the N_i integral (if this tet has a face on the port)
-                # if edgei in boundary_input_edge_numbers:
-                # If we are working with a tetrahedron with a face on the input port, need to perform integral with its edge
-                if tet in self.boundary_input_tets:
-                    # Need the third point that makes up the face of the input port
-                    found_edge_nos = []
-                    # Search for a different edge on the input port from this tetrahedral element
-                    for edge in tet.edges:
-                        if edge in self.boundary_input_edge_numbers:
-                            # We found an edge containing the third node, note it
-                            found_edge_nos.append(edge)
-                        if len(found_edge_nos) == 2:
-                            break
-                    # It is possible we do not find another edge that lies on the input port. We are checking for this here.
-                    if len(found_edge_nos) == 2:
-                        found_edge1 = self.all_edges[found_edge_nos[0]]
-                        found_edge2 = self.all_edges[found_edge_nos[1]]
-                        nodes = np.unique(np.array([self.all_nodes[found_edge1.node1], self.all_nodes[found_edge1.node2], self.all_nodes[found_edge2.node1], self.all_nodes[found_edge2.node2]]), axis=0)
-                        if len(nodes) != 3:
-                            raise RuntimeError("Did not find 3 nodes on surface triangle")
-                        # Perform the N_i \dot K_N integral for the surface using gaussian quadrature
-                        sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
-                        N_i = np.zeros([len(sample_points), 3])
-                        N_i[:, 0] = Axl + Bxl*sample_points[:, 1] + Cxl*sample_points[:, 2]
-                        N_i[:, 1] = Ayl + Byl*sample_points[:, 0] + Cyl*sample_points[:, 2]
-                        N_i[:, 2] = Azl + Bzl*sample_points[:, 0] + Czl*sample_points[:, 1]
-                        # N_i = np.array([tet.interpolate([1] * 6, sample_point) for sample_point in sample_points])
-                        # Compute the x component of the edge interpolating function for each of the sample points
-                        # Get the E_inc field at each of the sample points
-                        E_inc = np.array([np.array(self.input_port.get_field_at(sample_point[0], sample_point[1])) for sample_point in sample_points])
-                        # Compute the dot product at each point
-                        values = np.reshape(N_i[:, 0] * E_inc[:, 0] + N_i[:, 1] * E_inc[:, 1] + N_i[:, 2] * E_inc[:, 2], [len(sample_points), 1])
-                        integral = quad_eval(nodes[0], nodes[1], nodes[2], values)
-                        self.b[self.remap_edge_nums[self.all_edges_map[edge1]]] += -integral
-                    else:
-                        raise RuntimeError("Did not find 2 surface edges for tetrahedron marked as having a face on edge")
 
                 # Iterate over the edges of the tetrahedron
                 for edgej in tet.edges:
@@ -436,6 +403,91 @@ class Waveguide3D:
                 raise RuntimeError("Did not find boundary face of boundary tetrahedron")
         return integral1 / integral2
 
+    def generate_b_vector(self, port, mode):
+        """
+        Generate the b vector with ``waveguide`` as the excited port for mode ``mode``.
+        :param port: The iwaveguide.Waveguide object to generate the b vector for.
+        :param mode: The mode index to excite the port with (0 is the lowest cut-off frequency mode).
+        :return: The generated b vector (as a numpy array).
+        """
+        if port is self.input_port:
+            boundary_tets = self.boundary_input_tets
+            boundary_edge_numbers = self.boundary_input_edge_numbers
+        elif port is self.output_port:
+            boundary_tets = self.boundary_output_tets
+            boundary_edge_numbers = self.boundary_output_edge_numbers
+        else:
+            raise ValueError("'waveguide' parameter did not match the input or output port.")
+        # Set the port into the correct mode
+        port.set_mode_index(mode)
+        # Create the empty b vector
+        b = np.zeros([len(self.remap_edge_nums)], dtype=complex)
+
+        # Iterate over each of the tetrahedrons
+        for tet in boundary_tets:
+            # We only care about tetrahedrons that lie on the port of interest
+            # if tet not in boundary_tets:
+            #     continue
+            # Iterate over all the edges of t
+            for edge_no in tet.edges:
+                # Skip over PEC walls
+                if edge_no in self.boundary_pec_edge_numbers:
+                    continue
+                # TODO: Think about checking if this edge number is in the boundary edge numbers
+                # Get a hold of the Edge object
+                edge = self.all_edges[edge_no]
+                # Get the indices of the tet.nodes list that correspond to the global node numbers of the edges
+                indices_l = [np.argwhere(tet.nodes == edge.node1)[0][0], np.argwhere(tet.nodes == edge.node2)[0][0]]
+                # The simplex constants for nodes i and j of edge l
+                a_il, a_jl = tet.simplex_consts[indices_l]
+                # Necessary constants from NASA paper eqs. 163-172
+                Axl = a_il[0]*a_jl[1] - a_il[1]*a_jl[0]
+                Bxl = a_il[2]*a_jl[1] - a_il[1]*a_jl[2]
+                Cxl = a_il[3]*a_jl[1] - a_il[1]*a_jl[3]
+                Ayl = a_il[0]*a_jl[2] - a_il[2]*a_jl[0]
+                Byl = a_il[1]*a_jl[2] - a_il[2]*a_jl[1]
+                Cyl = a_il[3]*a_jl[2] - a_il[2]*a_jl[3]
+                Azl = a_il[0]*a_jl[3] - a_il[3]*a_jl[0]
+                Bzl = a_il[1]*a_jl[3] - a_il[3]*a_jl[1]
+                Czl = a_il[2]*a_jl[3] - a_il[3]*a_jl[2]
+                # Need to find the third point that makes up the face of the input port
+                found_edge_nos = []
+                # Search for a different edge on the input port from this tetrahedral element
+                for edge_no2 in tet.edges:
+                    if edge_no2 in boundary_edge_numbers:
+                        # We found an edge containing the third node, note it
+                        found_edge_nos.append(edge_no2)
+                    if len(found_edge_nos) == 2:
+                        break
+                # It is possible we do not find another edge that lies on the input port. We are checking for this here.
+                if len(found_edge_nos) != 2:
+                    raise RuntimeError("Did not find 2 surface edges for tetrahedron marked as having a face on edge")
+                found_edge1 = self.all_edges[found_edge_nos[0]]
+                found_edge2 = self.all_edges[found_edge_nos[1]]
+                nodes = np.unique(np.array([self.all_nodes[found_edge1.node1], self.all_nodes[found_edge1.node2],
+                                            self.all_nodes[found_edge2.node1], self.all_nodes[found_edge2.node2]]),
+                                  axis=0)
+                if len(nodes) != 3:
+                    raise RuntimeError("Did not find 3 nodes on surface triangle")
+                # Perform the N_i \dot K_N integral for the surface using gaussian quadrature
+                sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
+                N_i = np.zeros([len(sample_points), 3])
+                N_i[:, 0] = Axl + Bxl * sample_points[:, 1] + Cxl * sample_points[:, 2]
+                N_i[:, 1] = Ayl + Byl * sample_points[:, 0] + Cyl * sample_points[:, 2]
+                N_i[:, 2] = Azl + Bzl * sample_points[:, 0] + Czl * sample_points[:, 1]
+                # N_i = np.array([tet.interpolate([1] * 6, sample_point) for sample_point in sample_points])
+                # Compute the x component of the edge interpolating function for each of the sample points
+                # Get the E_inc field at each of the sample points
+                E_inc = np.array(
+                    [np.array(port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
+                     sample_points])
+                # Compute the dot product at each point
+                values = np.reshape(N_i[:, 0] * E_inc[:, 0] + N_i[:, 1] * E_inc[:, 1] + N_i[:, 2] * E_inc[:, 2],
+                                    [len(sample_points), 1])
+                integral = quad_eval(nodes[0], nodes[1], nodes[2], values)
+                b[self.remap_edge_nums[edge_no]] += -integral
+        return b
+
     def get_incident_profile_at(self, p):
         """
         Compute the incident field at a particular point, based on the xy plane. Assumes input port lies in xy plane.
@@ -450,7 +502,6 @@ class Waveguide3D:
                 phis = [self.b[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
                 # Interpolate the incident field at the input port (if no reflection, should be similar to the solution vector results)
                 E1 = np.array(tet.interpolate(phis, p))
-                # print("Yes")
                 return E1
         raise RuntimeError(f"Did not find a tetrahedron that point ({p[0]}, {p[1]}, {p[2]}) lied in.")
 
@@ -562,16 +613,18 @@ waveguide.solve()
 print(f"Solved in {time.time() - start_time} seconds")
 s11 = waveguide.compute_s11()
 s21 = waveguide.compute_s21()
-# num_phases = 50
+print(abs(s21))
+print(atan(s21.imag/s21.real) / 2 / pi * 360)
+num_phases = 50
 # for i in range(num_phases):
 #     waveguide.plot_fields(plane="xy", offset=1.75/2, phase=i*2*pi/num_phases, use_cached_fields=True)
 #     plt.savefig(f"images/te10_planexy_{floor(i/10)}{i%10}")
 #     plt.close()
-# for i in range(num_phases):
-#     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-25E-8, vmax=25E-8)
-#     waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
-#     plt.savefig(f"images/te10_planexz_y0p25_{floor(i/10)}{i%10}")
-#     plt.close()
+for i in range(num_phases):
+    # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-25E-8, vmax=25E-8)
+    waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
+    plt.savefig(f"images/te10_planexz_y0p25_{floor(i/10)}{i%10}")
+    plt.close()
 # waveguide.Ex = None
 # for i in range(num_phases):
 #     waveguide.plot_fields(plane="xz", offset=0.1, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
