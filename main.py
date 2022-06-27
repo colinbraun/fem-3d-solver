@@ -3,7 +3,8 @@ import numpy as np
 from iwaveguide.waveguide import Waveguide
 from scipy.linalg import inv
 import matplotlib.pyplot as plt
-from math import floor, e, pi, atan, sqrt
+from math import floor, e, pi, atan2, sqrt
+from scipy.constants import c, mu_0
 import time
 
 # Turn on interactive plotting
@@ -12,7 +13,7 @@ plt.ion()
 
 class Waveguide3D:
     """Class representing a 3D waveguide with an input port and output port (not necessarily same size or shape)"""
-    def __init__(self, filename, k0=4):
+    def __init__(self, filename, k0=4.):
         """
         Constructor of Waveguide3D.
         :param filename: A string giving the path to the .inp file to be loaded.
@@ -26,6 +27,7 @@ class Waveguide3D:
         self.y_max = np.amax(self.all_nodes[:, 1])
         self.z_min = np.amin(self.all_nodes[:, 2])
         self.z_max = np.amax(self.all_nodes[:, 2])
+        self.k0 = k0
         # Construct empty K and b matrices
         self.K = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)], dtype=complex)
         self.b = np.zeros([len(self.remap_edge_nums)], dtype=complex)
@@ -34,12 +36,12 @@ class Waveguide3D:
         # Set its mode to be the specified propagating mode (0 -> TE10, 4 -> TM11)
         self.input_port.set_mode_index(0)
         # Solve the waveguide for k0 = 4 (this will work for TE10 mode excitation, but won't excite other modes)
-        self.input_port.solve_k0(4)
+        self.input_port.solve_k0(k0)
         # TODO: Change this to have an output port that differs from the input port. Will have to solve it too.
         # self.output_port = self.input_port
         self.output_port = Waveguide(filename, ["OutputPort"], "OutPortBoundary")
         self.output_port.set_mode_index(0)
-        self.output_port.solve_k0(4)
+        self.output_port.solve_k0(k0)
         # Create an empty coefficient array. This is loaded by solve()
         self.edge_coefficients = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)])
         # Placeholders
@@ -203,7 +205,7 @@ class Waveguide3D:
                             n_hat_x_nj = np.array([np.cross(n_hat, vec) for vec in N_j])
                             dotted = n_hat_x_ni[:, 0] * n_hat_x_nj[:, 0] + n_hat_x_ni[:, 1] * n_hat_x_nj[:, 1] + n_hat_x_ni[:, 2] * n_hat_x_nj[:, 2]
                             dotted = np.reshape(dotted, [len(dotted), 1])
-                            ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
+                            # ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
                             integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
                             self.K[self.remap_edge_nums[self.all_edges_map[edge1]], self.remap_edge_nums[self.all_edges_map[edge2]]] += self.output_port.get_selected_beta() * integral * 1j
                     # Otherwise we are working with an inner edge (not on boundary). Do necessary integral.
@@ -640,6 +642,7 @@ class Waveguide3D:
         else:
             b = custom_coefficients
         n_hat = np.array([0, 0, 1])
+        beta = port.get_selected_beta()
         # Iterate over the input port boundary tetrahedrons to calculate the integral
         for tet in boundary_tets:
             # Want to collect 2 edges that lie on the surface to find the 3 nodes that make it up
@@ -670,7 +673,9 @@ class Waveguide3D:
                 # Interpolate the incident field at the input port (if no reflection, should be similar to the solution vector results)
                 Ep = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
                 # Ep = Ep / sqrt(7.87771167E-19)
-                Hp = np.array([np.cross(n_hat, Ep[i]) for i in range(len(Ep))])
+                # z_te = \omega * \mu / \beta
+                z_te = self.k0 * c * mu_0 / beta
+                Hp = np.array([np.cross(n_hat, Ep[i]) for i in range(len(Ep))]) / z_te
                 # Compute the dot product at each point
                 # values = np.reshape(Ep[:, 0] * Ep_conj[:, 0] + Ep[:, 1] * Ep_conj[:, 1] + Ep[:, 2] * Ep_conj[:, 2],
                 #                     [len(sample_points), 1])
@@ -681,7 +686,7 @@ class Waveguide3D:
                 raise RuntimeError("Did not find boundary face of boundary tetrahedron")
         # if power[0].imag != 0:
         #     raise RuntimeError(f"Calculated power {power[0]} contained imaginary component but expected it to be purely real.")
-        return abs(power[0])
+        return abs(power)
 
     def get_fields_in_plane(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1):
         """
@@ -782,15 +787,32 @@ class Waveguide3D:
         return fig
 
 
+# Generate S21 results for a range of k0 (frequencies)
+# k0s = np.linspace(0.1, 5, 20)
+# s21s = np.zeros([20])
+# s11s = np.zeros([20])
+# phases = np.zeros([20])
+# for i, k0 in enumerate(k0s):
+#     waveguide = Waveguide3D("coaxial_cable_13000tets_20220626.inp", k0)
+#     waveguide.solve()
+#     s11 = waveguide.compute_s11_new()
+#     s11s[i] = abs(s11)
+#     s21 = waveguide.compute_s21()
+#     s21s[i] = abs(s21)
+#     phases[i] = atan2(s21.imag, s21.real) / 2 / pi * 360
 # waveguide = Waveguide3D("rectangular_waveguide_3d_less_coarse.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220608.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220608_coarse.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220615.inp")
-waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp")
+# The most common test so far:
+waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
 # The first non-TEM mode in this coaxial cable of inner rad 0.25, outer rad 1 is k0 = ~1.598, so we choose k0 below that
-# waveguide = Waveguide3D("coaxial_cable_13000tets_20220626.inp", 1)
+# waveguide = Waveguide3D("coaxial_cable_13000tets_20220626.inp", 5)
+# waveguide = Waveguide3D("prism_waveguide_11000tets_20220627.inp", 3)
 # betas, all_eigenvectors, k0s = waveguide.input_port.solve(0.001, 5, 100)
 # waveguide.input_port.plot_dispersion(k0s, betas, False)
+# plt.savefig("dispersion.png")
+# exit()
 # waveguide = Waveguide3D("rectangular_waveguide_20220622_40000tets.inp")
 # waveguide.input_port.set_mode_index(0)
 # waveguide.input_port.plot_fields()
@@ -801,7 +823,7 @@ s11 = waveguide.compute_s11()
 s11_new = waveguide.compute_s11_new()
 s21 = waveguide.compute_s21()
 print(abs(s21))
-print(atan(s21.imag/s21.real) / 2 / pi * 360)
+print(atan2(s21.imag, s21.real) / 2 / pi * 360)
 z_length = waveguide.z_max - waveguide.z_min
 vmin = -2E-7
 vmax = 2E-7

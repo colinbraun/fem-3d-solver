@@ -562,7 +562,7 @@ def quad_eval(p1, p2, p3, f):
     for m in range(len(weights)):
         val = val+weights[m]*f[m, :]
     val = val*Ak
-    return val
+    return val[0] if len(val) == 1 else val
 
 
 def where(node_coordinates, node_ids, p):
