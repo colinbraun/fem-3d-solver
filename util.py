@@ -311,10 +311,11 @@ def load_mesh_block(filename, block_name):
         return data
 
 
-def load_mesh(filename):
+def load_mesh(filename, permittivity=1):
     """
     Load a mesh from a file. Must have at least 2 blocks, one containing all surface element_to_node_conn, the other the edge ones.
     :param filename: The name of the mesh file (a .inp a.k.a. abaqus file) to load
+    :param permittivity: The relative permittivity of the material
     :return: A number of items. See comments at bottom of this function, above the return statement.
     """
     # Load the nodes
@@ -362,7 +363,7 @@ def load_mesh(filename):
             tet_edges.add(edge2_number)
             tet_edges.add(edge3_number)
         # Create the tetrahedron object, converting the global node numbers set to a numpy array
-        tetrahedrons.append(TetrahedralElement(tet))
+        tetrahedrons.append(TetrahedralElement(tet, permittivity))
 
     # Convert tetrahedrons to numpy array
     all_tets = np.array(tetrahedrons)

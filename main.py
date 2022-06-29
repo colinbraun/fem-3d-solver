@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from math import floor, e, pi, atan2, sqrt
 from scipy.constants import c, mu_0
 import time
+import analytical
 
 # Turn on interactive plotting
 plt.ion()
@@ -13,13 +14,14 @@ plt.ion()
 
 class Waveguide3D:
     """Class representing a 3D waveguide with an input port and output port (not necessarily same size or shape)"""
-    def __init__(self, filename, k0=4.):
+    def __init__(self, filename, k0=4., permittivity=1.):
         """
         Constructor of Waveguide3D.
         :param filename: A string giving the path to the .inp file to be loaded.
+        :param permittivity: The relative permittivity of the material
         """
         # Load the mesh
-        self.all_nodes, self.tetrahedrons, self.tets_node_ids, self.all_edges, self.boundary_pec_edge_numbers, self.boundary_input_edge_numbers, self.boundary_output_edge_numbers, self.remap_edge_nums, self.all_edges_map, self.boundary_input_tets, self.boundary_output_tets = load_mesh(filename)
+        self.all_nodes, self.tetrahedrons, self.tets_node_ids, self.all_edges, self.boundary_pec_edge_numbers, self.boundary_input_edge_numbers, self.boundary_output_edge_numbers, self.remap_edge_nums, self.all_edges_map, self.boundary_input_tets, self.boundary_output_tets = load_mesh(filename, permittivity)
         # Find the minimum and maximum x, y, and z values of the waveguide.
         self.x_min = np.amin(self.all_nodes[:, 0])
         self.x_max = np.amax(self.all_nodes[:, 0])
@@ -32,14 +34,14 @@ class Waveguide3D:
         self.K = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)], dtype=complex)
         self.b = np.zeros([len(self.remap_edge_nums)], dtype=complex)
         # Create a Waveguide object of the input port
-        self.input_port = Waveguide(filename, ["InputPort"], "InPortBoundary")
+        self.input_port = Waveguide(filename, ["InputPort"], "InPortBoundary", [permittivity])
         # Set its mode to be the specified propagating mode (0 -> TE10, 4 -> TM11)
         self.input_port.set_mode_index(0)
         # Solve the waveguide for k0 = 4 (this will work for TE10 mode excitation, but won't excite other modes)
         self.input_port.solve_k0(k0)
         # TODO: Change this to have an output port that differs from the input port. Will have to solve it too.
         # self.output_port = self.input_port
-        self.output_port = Waveguide(filename, ["OutputPort"], "OutPortBoundary")
+        self.output_port = Waveguide(filename, ["OutputPort"], "OutPortBoundary", [permittivity])
         self.output_port.set_mode_index(0)
         self.output_port.solve_k0(k0)
         # Create an empty coefficient array. This is loaded by solve()
@@ -549,6 +551,8 @@ class Waveguide3D:
                 E_inc = np.array(
                     [np.array(port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
                      sample_points])
+                width, height = self.x_max - self.x_min, self.y_max - self.y_min
+                # E_inc = np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, width, height, self.k0*c) for p in sample_points])
                 # Compute the dot product at each point
                 values = np.reshape(N_i[:, 0] * E_inc[:, 0] + N_i[:, 1] * E_inc[:, 1] + N_i[:, 2] * E_inc[:, 2],
                                     [len(sample_points), 1])
@@ -805,11 +809,12 @@ class Waveguide3D:
 # waveguide = Waveguide3D("rectangular_waveguide_20220608_coarse.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220615.inp")
 # The most common test so far:
-waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
+# waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
 # The first non-TEM mode in this coaxial cable of inner rad 0.25, outer rad 1 is k0 = ~1.598, so we choose k0 below that
 # waveguide = Waveguide3D("coaxial_cable_13000tets_20220626.inp", 5)
+waveguide = Waveguide3D("coaxial_cable_12000tets_20220627.inp", k0=0.25, permittivity=2.25)
 # waveguide = Waveguide3D("prism_waveguide_11000tets_20220627.inp", 3)
-# betas, all_eigenvectors, k0s = waveguide.input_port.solve(0.001, 5, 100)
+# betas, all_eigenvectors, k0s = waveguide.input_port.solve(0.001, 2.5, 100)
 # waveguide.input_port.plot_dispersion(k0s, betas, False)
 # plt.savefig("dispersion.png")
 # exit()
@@ -825,8 +830,10 @@ s21 = waveguide.compute_s21()
 print(abs(s21))
 print(atan2(s21.imag, s21.real) / 2 / pi * 360)
 z_length = waveguide.z_max - waveguide.z_min
-vmin = -2E-7
-vmax = 2E-7
+# vmin = -2E-7
+# vmax = 2E-7
+vmin = None
+vmax = None
 num_phases = 50
 for i in range(num_phases):
     waveguide.plot_fields(plane="xy", offset=z_length/2, phase=i*2*pi/num_phases, use_cached_fields=True, vmin=vmin, vmax=vmax)
@@ -836,7 +843,8 @@ for i in range(num_phases):
 waveguide.Ex = None
 for i in range(num_phases):
     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-25E-8, vmax=25E-8)
-    waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
+    # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
+    waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=vmin, vmax=vmax, use_cached_fields=True)
     plt.savefig(f"images/te10_planexz_y0p25_{floor(i/10)}{i%10}")
     plt.close()
 # waveguide.Ex = None
