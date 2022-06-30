@@ -4,7 +4,7 @@ from iwaveguide.waveguide import Waveguide
 from scipy.linalg import inv
 import matplotlib.pyplot as plt
 from math import floor, e, pi, atan2, sqrt
-from scipy.constants import c, mu_0
+from scipy.constants import c, mu_0, epsilon_0
 import time
 import analytical
 
@@ -30,6 +30,8 @@ class Waveguide3D:
         self.z_min = np.amin(self.all_nodes[:, 2])
         self.z_max = np.amax(self.all_nodes[:, 2])
         self.k0 = k0
+        # The angular frequency of operation (from k0)
+        self.omega = k0 / sqrt(mu_0 * epsilon_0)
         # Construct empty K and b matrices
         self.K = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)], dtype=complex)
         self.b = np.zeros([len(self.remap_edge_nums)], dtype=complex)
@@ -160,7 +162,7 @@ class Waveguide3D:
                             dotted = np.reshape(dotted, [len(dotted), 1])
                             # ni_dot_nj = N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2]
                             integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
-                            self.K[self.remap_edge_nums[self.all_edges_map[edge1]], self.remap_edge_nums[self.all_edges_map[edge2]]] += integral * self.input_port.get_selected_beta() * 1j
+                            self.K[self.remap_edge_nums[edgei], self.remap_edge_nums[edgej]] += integral * self.input_port.get_selected_beta() * 1j
 
                     # If working with output port edges, need to do different integral
                     elif edgei in self.boundary_output_edge_numbers and edgej in self.boundary_output_edge_numbers:
@@ -209,7 +211,7 @@ class Waveguide3D:
                             dotted = np.reshape(dotted, [len(dotted), 1])
                             # ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
                             integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
-                            self.K[self.remap_edge_nums[self.all_edges_map[edge1]], self.remap_edge_nums[self.all_edges_map[edge2]]] += self.output_port.get_selected_beta() * integral * 1j
+                            self.K[self.remap_edge_nums[edgei], self.remap_edge_nums[edgej]] += self.output_port.get_selected_beta() * integral * 1j
                     # Otherwise we are working with an inner edge (not on boundary). Do necessary integral.
                     # Currently removing this else unless it is found that it is needed
                     # else:
@@ -231,8 +233,8 @@ class Waveguide3D:
                     i_sum = I1 + I2 + I3 + I4 + I5 + I6 + I7 + I8 + I9 + I10
                     dot_part = -self.input_port.k0**2 * tet.permittivity * edge1.length * edge2.length / 1296 / tet.volume**3 * i_sum
                     k_value = curl_dot_curl_part + dot_part
-                    index1 = self.remap_edge_nums[self.all_edges_map[edge1]]
-                    index2 = self.remap_edge_nums[self.all_edges_map[edge2]]
+                    index1 = self.remap_edge_nums[edgei]
+                    index2 = self.remap_edge_nums[edgej]
                     self.K[index1, index2] += k_value
         print("Finished constructing equation matrix")
         print("Solving equation matrix")
@@ -470,6 +472,153 @@ class Waveguide3D:
 
         return integral1 / integral2
 
+    def compute_s21_jin(self):
+        """
+        Compute the S21 value using formula from Jin's book.
+        :return: The S21 value.
+        """
+        a, b = self.x_max - self.x_min, self.y_max - self.y_min
+        # The numerator of the result
+        integral1 = 0
+        mode = 0
+        # The denominator of the result
+        # integral2 = self.integrate_port_profile(self.input_port, mode)
+        # The b vector for port 2 (the output port)
+        b2 = self.generate_b_vector(self.output_port, mode)
+        power = sqrt(self.calculate_port_profile_power(self.output_port, mode))
+        power_total = sqrt(self.calculate_port_profile_power(self.output_port, 0, self.edge_coefficients))
+        # power_total = sqrt(self.calculate_port_profile_power(self.input_port, mode))
+        max_mag = 0
+
+        # Iterate over the output port boundary tetrahedrons to calculate integral1
+        for tet in self.boundary_output_tets:
+            # Want to collect 2 edges that lie on the surface to find the 3 nodes that make it up
+            found_edge_nos = []
+            for edge in tet.edges:
+                if edge in self.boundary_output_edge_numbers:
+                    # We found an edge containing the third node, note it
+                    found_edge_nos.append(edge)
+                # Once 2 edges have been found, stop searching
+                if len(found_edge_nos) == 2:
+                    break
+            # This should always be True, but check just in case.
+            if len(found_edge_nos) == 2:
+                found_edge1 = self.all_edges[found_edge_nos[0]]
+                found_edge2 = self.all_edges[found_edge_nos[1]]
+                # Get the 3 nodes that make up the triangle on the surface
+                nodes = np.unique(np.array([self.all_nodes[found_edge1.node1], self.all_nodes[found_edge1.node2],
+                                            self.all_nodes[found_edge2.node1], self.all_nodes[found_edge2.node2]]),
+                                  axis=0)
+                # Ensure 3 were found
+                if len(nodes) != 3:
+                    raise RuntimeError("Did not find 3 nodes on surface triangle")
+                # -------------Perform quadrature on the 3 nodes that make up the triangle on the surface-----------
+                # Generate the points to sample at for the quadrature
+                sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
+                # Get the edge coefficients for each of the edges that make up this tetrahedron
+                phis = [self.edge_coefficients[self.remap_edge_nums[edge]] if edge in self.remap_edge_nums else 0 for
+                        edge in tet.edges]
+                # Interpolate the field measured at the output port
+                E2 = np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points])
+                # TODO: Testing to see what E0 is each time
+                total_e0 = np.linalg.norm(E2, axis=1)
+                for mag in total_e0:
+                    if mag > max_mag:
+                        max_mag = mag
+                # print(len(total_e0))
+                # print(len(sample_points))
+                # Get the edge coefficients for the output port field profile
+                phis = [b2[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
+                # Interpolate the incident field at the output port
+                # Ep2 = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
+                Ep2 = np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, a, b, self.k0*c) for p in sample_points])
+                inc_e0 = np.linalg.norm(Ep2, axis=1)
+                # print("total/inc")
+                # print(total_e0/inc_e0)
+                # print("total")
+                # print(total_e0)
+                # print("inc")
+                # print(inc_e0)
+                Ep2_conj = np.conjugate(Ep2)
+                # Compute the dot product at each point
+                values1 = np.reshape(E2[:, 0] * Ep2_conj[:, 0] + E2[:, 1] * Ep2_conj[:, 1] + E2[:, 2] * Ep2_conj[:, 2],
+                                     [len(sample_points), 1])
+                # Compute the integral in the numerator using quadrature
+                integral1 += quad_eval(nodes[0], nodes[1], nodes[2], values1)
+            else:
+                raise RuntimeError("Did not find boundary face of boundary tetrahedron")
+        E0 = max_mag
+        kz = analytical.rect_wg_beta(a, b, self.omega)
+        print("max mag")
+        print(max_mag)
+        return integral1 * 2 * e**(1j*kz*self.z_min) / a / b / E0
+
+    def compute_s11_jin(self):
+        """
+        Integrate the input port, generating the S11 value.
+        :return: The evaluated S-parameter.
+        """
+        a, b = self.x_max - self.x_min, self.y_max - self.y_min
+        max_mag = 0
+        mode = 0
+        # The numerator of the S11 parameter (will need to normalize this manually)
+        integral1 = 0
+        # The b vector for port 1 (the input port)
+        b1 = self.generate_b_vector(self.input_port, mode)
+        for tet in self.boundary_input_tets:
+            # Want to collect 2 edges that lie on the surface to find the 3 nodes that make it up
+            found_edge_nos = []
+            for edge in tet.edges:
+                if edge in self.boundary_input_edge_numbers:
+                    # We found an edge containing the third node, note it
+                    found_edge_nos.append(edge)
+                # Once 2 edges have been found, stop searching
+                if len(found_edge_nos) == 2:
+                    break
+            # This should always be True, but check just in case.
+            if len(found_edge_nos) == 2:
+                found_edge1 = self.all_edges[found_edge_nos[0]]
+                found_edge2 = self.all_edges[found_edge_nos[1]]
+                # Get the 3 nodes that make up the triangle on the surface
+                nodes = np.unique(np.array([self.all_nodes[found_edge1.node1], self.all_nodes[found_edge1.node2],
+                                            self.all_nodes[found_edge2.node1], self.all_nodes[found_edge2.node2]]),
+                                  axis=0)
+                # Ensure 3 were found
+                if len(nodes) != 3:
+                    raise RuntimeError("Did not find 3 nodes on surface triangle")
+                # -------------Perform quadrature on the 3 nodes that make up the triangle on the surface-----------
+                # Generate the points to sample at for the quadrature
+                sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
+                # Get the edge coefficients for each of the edges that make up this tetrahedron
+                phis = [self.edge_coefficients[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for
+                        edge_no in tet.edges]
+                # Interpolate the field measured at the input port (if no reflection, should be similar to incident field used in excitation)
+                Ec = np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points])
+                # Get the edge coefficients that correspond to the incident field (b vector)
+                phis = [b1[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
+                # Interpolate the incident field at the input port (if no reflection, should be similar to the solution vector results)
+                Ep1 = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
+                total_e0 = np.linalg.norm(Ep1, axis=1)
+                for mag in total_e0:
+                    if mag > max_mag:
+                        max_mag = mag
+                Ep1 = np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, a, b, self.k0*c) for p in sample_points])
+                # Ec - E1 for use in the integral
+                # Get the complex conjugate of the incident field
+                Ep1_conj = np.conjugate(Ep1)
+                # Compute the dot product at each point
+                values1 = np.reshape(Ec[:, 0] * Ep1_conj[:, 0] + Ec[:, 1] * Ep1_conj[:, 1] + Ec[:, 2] * Ep1_conj[:, 2],
+                                     [len(sample_points), 1])
+                # Compute the integral in the numerator using quadrature
+                integral1 += quad_eval(nodes[0], nodes[1], nodes[2], values1)
+            else:
+                raise RuntimeError("Did not find boundary face of boundary tetrahedron")
+        E0 = max_mag
+        kz = analytical.rect_wg_beta(a, b, self.omega)
+        print("max mag")
+        print(max_mag)
+        return integral1 * 2 * e**(-1j*kz*self.z_max) / a / b / E0 - e**(-2j*kz*self.z_max)
+
     def generate_b_vector(self, port, mode):
         """
         Generate the b vector with ``port`` as the excited port for mode ``mode``.
@@ -480,9 +629,11 @@ class Waveguide3D:
         if port is self.input_port:
             boundary_tets = self.boundary_input_tets
             boundary_edge_numbers = self.boundary_input_edge_numbers
+            z = self.z_max
         elif port is self.output_port:
             boundary_tets = self.boundary_output_tets
             boundary_edge_numbers = self.boundary_output_edge_numbers
+            z = self.z_min
         else:
             raise ValueError("'port' parameter did not match the input or output port.")
         # Set the port into the correct mode
@@ -548,11 +699,13 @@ class Waveguide3D:
                 # N_i = np.array([tet.interpolate([1] * 6, sample_point) for sample_point in sample_points])
                 # Compute the x component of the edge interpolating function for each of the sample points
                 # Get the E_inc field at each of the sample points
-                E_inc = np.array(
-                    [np.array(port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
-                     sample_points])
-                width, height = self.x_max - self.x_min, self.y_max - self.y_min
-                # E_inc = np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, width, height, self.k0*c) for p in sample_points])
+                # E_inc = -2j * port.get_selected_beta() * np.array(
+                #     [np.array(port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
+                #      sample_points])
+                a, b_ = self.x_max - self.x_min, self.y_max - self.y_min
+                # Use analytical formulas
+                kz = analytical.rect_wg_beta(a, b_, self.k0*c)
+                E_inc = -2j*kz*e**(-1j*kz*z) * np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, a, b_, self.k0*c) for p in sample_points])
                 # Compute the dot product at each point
                 values = np.reshape(N_i[:, 0] * E_inc[:, 0] + N_i[:, 1] * E_inc[:, 1] + N_i[:, 2] * E_inc[:, 2],
                                     [len(sample_points), 1])
@@ -809,10 +962,12 @@ class Waveguide3D:
 # waveguide = Waveguide3D("rectangular_waveguide_20220608_coarse.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220615.inp")
 # The most common test so far:
-# waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
+waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
 # The first non-TEM mode in this coaxial cable of inner rad 0.25, outer rad 1 is k0 = ~1.598, so we choose k0 below that
 # waveguide = Waveguide3D("coaxial_cable_13000tets_20220626.inp", 5)
-waveguide = Waveguide3D("coaxial_cable_12000tets_20220627.inp", k0=0.25, permittivity=2.25)
+# waveguide = Waveguide3D("coaxial_cable_12000tets_20220627.inp", k0=0.25, permittivity=2.25)
+# waveguide = Waveguide3D("coaxial_cable_short_43000tets_20220629.inp", k0=0.25, permittivity=2.25)
+# waveguide = Waveguide3D("rectangular_waveguide_short_fine_41000tets_20220629.inp")
 # waveguide = Waveguide3D("prism_waveguide_11000tets_20220627.inp", 3)
 # betas, all_eigenvectors, k0s = waveguide.input_port.solve(0.001, 2.5, 100)
 # waveguide.input_port.plot_dispersion(k0s, betas, False)
@@ -824,12 +979,15 @@ waveguide = Waveguide3D("coaxial_cable_12000tets_20220627.inp", k0=0.25, permitt
 start_time = time.time()
 waveguide.solve()
 print(f"Solved in {time.time() - start_time} seconds")
-s11 = waveguide.compute_s11()
+# s11 = waveguide.compute_s11()
 s11_new = waveguide.compute_s11_new()
 s21 = waveguide.compute_s21()
+s11_jin = waveguide.compute_s11_jin()
+s21_jin = waveguide.compute_s21_jin()
 print(abs(s21))
 print(atan2(s21.imag, s21.real) / 2 / pi * 360)
 z_length = waveguide.z_max - waveguide.z_min
+y_length = waveguide.y_max - waveguide.y_min
 # vmin = -2E-7
 # vmax = 2E-7
 vmin = None
@@ -844,7 +1002,8 @@ waveguide.Ex = None
 for i in range(num_phases):
     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-25E-8, vmax=25E-8)
     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
-    waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=vmin, vmax=vmax, use_cached_fields=True)
+    # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=vmin, vmax=vmax, use_cached_fields=True)
+    waveguide.plot_fields(plane="xz", offset=y_length/2, phase=i*2*pi/num_phases, vmin=vmin, vmax=vmax, use_cached_fields=True)
     plt.savefig(f"images/te10_planexz_y0p25_{floor(i/10)}{i%10}")
     plt.close()
 # waveguide.Ex = None

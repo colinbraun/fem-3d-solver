@@ -21,6 +21,25 @@ def rect_wg_field_at(x, y, a, b, omega, m=1, n=0, permittivity=1., te=True):
     kc = sqrt((m*pi/a)**2 + (n*pi/b)**2)
     if k < kc:
         raise ValueError(f"Wave with k={k} is below cutoff frequency kc={kc}.")
-    ex = omega * mu_0 * n * pi / kc**2 / b * cos(m*pi*x/a) * sin(n*pi*y/b)
-    ey = -omega * mu_0 * m * pi / kc**2 / a * sin(m*pi*x/a) * cos(n*pi*y/b)
+    # ex = omega * mu_0 * n * pi / kc**2 / b * cos(m*pi*x/a) * sin(n*pi*y/b)
+    # ey = -omega * mu_0 * m * pi / kc**2 / a * sin(m*pi*x/a) * cos(n*pi*y/b)
+    ex = 0
+    ey = sin(pi*x/a)
     return ex, ey, 0
+
+
+def rect_wg_beta(a, b, omega, m=1, n=0, permittivity=1, te=True):
+    """
+    Calculate the propagation constant (beta) for a rectangular waveguide at a specific frequency.
+    :param a: The x length of the waveguide.
+    :param b: The y length of the waveguide.
+    :param omega: The angular frequency.
+    :param m: The first mode index. Default = 1 (for TE10 mode)
+    :param n: The second mode index. Default = 0 (for TE10 mode)
+    :param permittivity: The permittivity of the material inside the waveguide. Default = 1
+    :param te: If True, evaluates the field assuming a TE mode.
+    :return: The propagation constant (beta) for the waveguide at the specified frequency.
+    """
+    k = omega * sqrt(mu_0 * epsilon_0 * permittivity)
+    kc = sqrt((m * pi / a) ** 2 + (n * pi / b) ** 2)
+    return sqrt(k**2 - kc**2)
