@@ -547,11 +547,13 @@ class Waveguide3D:
                 integral1 += quad_eval(nodes[0], nodes[1], nodes[2], values1)
             else:
                 raise RuntimeError("Did not find boundary face of boundary tetrahedron")
-        E0 = max_mag
+        # E0 = max_mag
+        # E0 should come from the incident wave
+        E0 = 1
         kz = analytical.rect_wg_beta(a, b, self.omega)
-        print("max mag")
+        print("max mag measured at output port")
         print(max_mag)
-        return integral1 * 2 * e**(1j*kz*self.z_min) / a / b / E0
+        return integral1 * 2 * e**(1j*kz*self.z_max) / a / b / E0
 
     def compute_s11_jin(self):
         """
@@ -559,7 +561,8 @@ class Waveguide3D:
         :return: The evaluated S-parameter.
         """
         a, b = self.x_max - self.x_min, self.y_max - self.y_min
-        max_mag = 0
+        max_mag_inc = 0
+        max_mag_ip = 0
         mode = 0
         # The numerator of the S11 parameter (will need to normalize this manually)
         integral1 = 0
@@ -598,10 +601,14 @@ class Waveguide3D:
                 phis = [b1[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
                 # Interpolate the incident field at the input port (if no reflection, should be similar to the solution vector results)
                 Ep1 = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
-                total_e0 = np.linalg.norm(Ep1, axis=1)
-                for mag in total_e0:
-                    if mag > max_mag:
-                        max_mag = mag
+                mags_inc = np.linalg.norm(Ep1, axis=1)
+                for mag in mags_inc:
+                    if mag > max_mag_inc:
+                        max_mag_inc = mag
+                mags_ip = np.linalg.norm(Ec, axis=1)
+                for mag in mags_ip:
+                    if mag > max_mag_ip:
+                        max_mag_ip = mag
                 Ep1 = np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, a, b, self.k0*c) for p in sample_points])
                 # Ec - E1 for use in the integral
                 # Get the complex conjugate of the incident field
@@ -613,11 +620,14 @@ class Waveguide3D:
                 integral1 += quad_eval(nodes[0], nodes[1], nodes[2], values1)
             else:
                 raise RuntimeError("Did not find boundary face of boundary tetrahedron")
-        E0 = max_mag
+        # E0 = max_mag_inc
+        E0 = 1
         kz = analytical.rect_wg_beta(a, b, self.omega)
-        print("max mag")
-        print(max_mag)
-        return integral1 * 2 * e**(-1j*kz*self.z_max) / a / b / E0 - e**(-2j*kz*self.z_max)
+        print("max mag using b vector")
+        print(max_mag_inc)
+        print("max mag measured at input port")
+        print(max_mag_ip)
+        return integral1 * 2 * e**(-1j*kz*self.z_min) / a / b / E0 - e**(-2j*kz*self.z_min)
 
     def generate_b_vector(self, port, mode):
         """
@@ -629,11 +639,12 @@ class Waveguide3D:
         if port is self.input_port:
             boundary_tets = self.boundary_input_tets
             boundary_edge_numbers = self.boundary_input_edge_numbers
-            z = self.z_max
+            # TODO: Make this identified properly instead of assuming
+            z = self.z_min
         elif port is self.output_port:
             boundary_tets = self.boundary_output_tets
             boundary_edge_numbers = self.boundary_output_edge_numbers
-            z = self.z_min
+            z = self.z_max
         else:
             raise ValueError("'port' parameter did not match the input or output port.")
         # Set the port into the correct mode
@@ -696,6 +707,7 @@ class Waveguide3D:
                 N_i[:, 0] = Axl + Bxl * sample_points[:, 1] + Cxl * sample_points[:, 2]
                 N_i[:, 1] = Ayl + Byl * sample_points[:, 0] + Cyl * sample_points[:, 2]
                 N_i[:, 2] = Azl + Bzl * sample_points[:, 0] + Czl * sample_points[:, 1]
+                N_i = N_i * edge.length / 36 / tet.volume ** 2
                 # N_i = np.array([tet.interpolate([1] * 6, sample_point) for sample_point in sample_points])
                 # Compute the x component of the edge interpolating function for each of the sample points
                 # Get the E_inc field at each of the sample points
@@ -962,7 +974,9 @@ class Waveguide3D:
 # waveguide = Waveguide3D("rectangular_waveguide_20220608_coarse.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220615.inp")
 # The most common test so far:
-waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
+# waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
+waveguide = Waveguide3D("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
+
 # The first non-TEM mode in this coaxial cable of inner rad 0.25, outer rad 1 is k0 = ~1.598, so we choose k0 below that
 # waveguide = Waveguide3D("coaxial_cable_13000tets_20220626.inp", 5)
 # waveguide = Waveguide3D("coaxial_cable_12000tets_20220627.inp", k0=0.25, permittivity=2.25)
@@ -976,6 +990,7 @@ waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
 # waveguide = Waveguide3D("rectangular_waveguide_20220622_40000tets.inp")
 # waveguide.input_port.set_mode_index(0)
 # waveguide.input_port.plot_fields()
+b = waveguide.generate_b_vector(waveguide.input_port, 0)
 start_time = time.time()
 waveguide.solve()
 print(f"Solved in {time.time() - start_time} seconds")
@@ -988,6 +1003,8 @@ print(abs(s21))
 print(atan2(s21.imag, s21.real) / 2 / pi * 360)
 z_length = waveguide.z_max - waveguide.z_min
 y_length = waveguide.y_max - waveguide.y_min
+# vmin = -3E-6
+# vmax = 3E-6
 # vmin = -2E-7
 # vmax = 2E-7
 vmin = None
