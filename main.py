@@ -521,17 +521,18 @@ class Waveguide3D:
                 # Interpolate the field measured at the output port
                 E2 = np.array([np.array(tet.interpolate(phis, sample_point)) for sample_point in sample_points])
                 # TODO: Testing to see what E0 is each time
-                total_e0 = np.linalg.norm(E2, axis=1)
-                for mag in total_e0:
-                    if mag > max_mag:
-                        max_mag = mag
                 # print(len(total_e0))
                 # print(len(sample_points))
                 # Get the edge coefficients for the output port field profile
                 phis = [b2[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
                 # Interpolate the incident field at the output port
                 # Ep2 = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
-                Ep2 = np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, a, b, self.k0*c) for p in sample_points])
+                # Ep2 = np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, a, b, self.k0*c) for p in sample_points])
+                Ep2 = np.array([self.input_port.get_field_at(p[0], p[1]) for p in sample_points])
+                total_e0 = np.linalg.norm(Ep2, axis=1)
+                for mag in total_e0:
+                    if mag > max_mag:
+                        max_mag = mag
                 inc_e0 = np.linalg.norm(Ep2, axis=1)
                 # print("total/inc")
                 # print(total_e0/inc_e0)
@@ -549,7 +550,8 @@ class Waveguide3D:
                 raise RuntimeError("Did not find boundary face of boundary tetrahedron")
         # E0 = max_mag
         # E0 should come from the incident wave
-        E0 = 1
+        # E0 = 1
+        E0 = max_mag
         kz = analytical.rect_wg_beta(a, b, self.omega)
         print("max mag measured at output port")
         print(max_mag)
@@ -601,15 +603,16 @@ class Waveguide3D:
                 phis = [b1[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
                 # Interpolate the incident field at the input port (if no reflection, should be similar to the solution vector results)
                 Ep1 = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
-                mags_inc = np.linalg.norm(Ep1, axis=1)
-                for mag in mags_inc:
-                    if mag > max_mag_inc:
-                        max_mag_inc = mag
                 mags_ip = np.linalg.norm(Ec, axis=1)
                 for mag in mags_ip:
                     if mag > max_mag_ip:
                         max_mag_ip = mag
-                Ep1 = np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, a, b, self.k0*c) for p in sample_points])
+                # Ep1 = np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, a, b, self.k0*c) for p in sample_points])
+                Ep1 = np.array([self.input_port.get_field_at(p[0], p[1]) for p in sample_points])
+                mags_inc = np.linalg.norm(Ep1, axis=1)
+                for mag in mags_inc:
+                    if mag > max_mag_inc:
+                        max_mag_inc = mag
                 # Ec - E1 for use in the integral
                 # Get the complex conjugate of the incident field
                 Ep1_conj = np.conjugate(Ep1)
@@ -621,9 +624,9 @@ class Waveguide3D:
             else:
                 raise RuntimeError("Did not find boundary face of boundary tetrahedron")
         # E0 = max_mag_inc
-        E0 = 1
+        E0 = max_mag_inc
         kz = analytical.rect_wg_beta(a, b, self.omega)
-        print("max mag using b vector")
+        print("max mag incident")
         print(max_mag_inc)
         print("max mag measured at input port")
         print(max_mag_ip)
@@ -711,13 +714,13 @@ class Waveguide3D:
                 # N_i = np.array([tet.interpolate([1] * 6, sample_point) for sample_point in sample_points])
                 # Compute the x component of the edge interpolating function for each of the sample points
                 # Get the E_inc field at each of the sample points
-                # E_inc = -2j * port.get_selected_beta() * np.array(
-                #     [np.array(port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
-                #      sample_points])
+                E_inc = -2j * port.get_selected_beta() * np.array(
+                    [np.array(port.get_field_at(sample_point[0], sample_point[1])) for sample_point in
+                     sample_points])
                 a, b_ = self.x_max - self.x_min, self.y_max - self.y_min
                 # Use analytical formulas
                 kz = analytical.rect_wg_beta(a, b_, self.k0*c)
-                E_inc = -2j*kz*e**(-1j*kz*z) * np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, a, b_, self.k0*c) for p in sample_points])
+                # E_inc = -2j*kz*e**(-1j*kz*z) * np.array([analytical.rect_wg_field_at(p[0]-self.x_min, p[1]-self.y_min, a, b_, self.k0*c) for p in sample_points])
                 # Compute the dot product at each point
                 values = np.reshape(N_i[:, 0] * E_inc[:, 0] + N_i[:, 1] * E_inc[:, 1] + N_i[:, 2] * E_inc[:, 2],
                                     [len(sample_points), 1])
@@ -999,8 +1002,10 @@ s11_new = waveguide.compute_s11_new()
 s21 = waveguide.compute_s21()
 s11_jin = waveguide.compute_s11_jin()
 s21_jin = waveguide.compute_s21_jin()
-print(abs(s21))
-print(atan2(s21.imag, s21.real) / 2 / pi * 360)
+# print(abs(s21))
+# print(atan2(s21.imag, s21.real) / 2 / pi * 360)
+print(f"S11: {abs(s11_jin)} @ {atan2(s11_jin.imag, s11_jin.real) / 2 / pi * 360} deg")
+print(f"S21: {abs(s21_jin)} @ {atan2(s21_jin.imag, s21_jin.real) / 2 / pi * 360} deg")
 z_length = waveguide.z_max - waveguide.z_min
 y_length = waveguide.y_max - waveguide.y_min
 # vmin = -3E-6
