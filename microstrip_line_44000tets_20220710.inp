@@ -8374,7 +8374,7 @@ version: 2021.11
     8365,    1.034346e-02,    1.084141e-03,    1.169419e-02
 **
 ********************************** E L E M E N T S ****************************
-*ELEMENT, TYPE=C3D4, ELSET=Tetrahedrons
+*ELEMENT, TYPE=C3D4, ELSET=TetrahedronsVacuum
        1,    3957,    3958,    3959,    3960
        2,    3960,    3962,    3961,    3963
        3,    3960,    3964,    3963,    3965
@@ -44086,6 +44086,7 @@ version: 2021.11
    35709,     599,    7011,    1854,    8167
    35710,     599,    8128,    7011,    8167
    35711,    1853,    7161,    7735,    8167
+*ELEMENT, TYPE=C3D4, ELSET=TetrahedronsSubstrate
    35712,    1265,    1363,    2218,    2219
    35713,    1332,    2219,    2220,    2221
    35714,    1877,    2218,    1974,    2219
@@ -57404,7 +57405,8 @@ version: 2021.11
    49020,       9,       5
 **
 ********************************** P R O P E R T I E S ************************
-*SOLID SECTION, ELSET=Tetrahedrons, MATERIAL=Default-Steel
+*SOLID SECTION, ELSET=TetrahedronsVacuum, MATERIAL=Default-Steel
+*SOLID SECTION, ELSET=TetrahedronsSubstrate, MATERIAL=Default-Steel
 *SHELL SECTION, ELSET=PECWalls, SECTION INTEGRATION=SIMPSON, MATERIAL=Default-Steel
 1.000000e+00
 *SHELL SECTION, ELSET=InputPortVacuum, SECTION INTEGRATION=SIMPSON, MATERIAL=Default-Steel
