@@ -747,17 +747,23 @@ class Waveguide3D:
 # waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
 # waveguide = Waveguide3D.construct_simple("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
 # waveguide = Waveguide3D("rectangular_waveguide_12000tets_correct_orientation_rotated_20220705.inp", 8)
-# Create the microstrip-line simulated at f = 1 MHz
 vn, vp, pn = ["TetrahedronsVacuum", "TetrahedronsSubstrate"], [1, 4.5], "PECWalls"
 ipn, ipbn, ipp = ["InputPortVacuum", "InputPortSubstrate"], "InPortPEC", [1, 4.5]
 opn, opbn, opp = ["OutputPortVacuum", "OutputPortSubstrate"], "OutPortPEC", [1, 4.5]
-
+p1ip, p2ip = np.array([0, 0.0008]), np.array([0, 0])
+p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
+# Create the microstrip-line simulated at f = 1 MHz
 # waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 0.0209584502195, vn, vp, pn, ipn, ipbn, ipp, opn, opbn, opp)
-waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 0.0809584502195, vn, vp, pn, ipn, ipbn, ipp, opn, opbn, opp)
-print("input port betas")
-print(waveguide.input_port.betas)
-print("output port betas")
-print(waveguide.output_port.betas)
+waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 2.0, vn, vp, pn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
+# print("input port betas")
+# print(waveguide.input_port.betas)
+# print("output port betas")
+# print(waveguide.output_port.betas)
+# waveguide.input_port.plot_fields()
+# plt.savefig("ip_fields.png")
+# waveguide.output_port.plot_fields()
+# plt.savefig("op_fields.png")
+# print("Plotted port fields")
 
 # The first non-TEM mode in this coaxial cable of inner rad 0.25, outer rad 1 is k0 = ~1.598, so we choose k0 below that
 # waveguide = Waveguide3D("coaxial_cable_13000tets_20220626.inp", 5)
