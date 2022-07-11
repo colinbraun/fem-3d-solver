@@ -13,7 +13,7 @@ plt.ion()
 
 class Waveguide3D:
     """Class representing a 3D waveguide with an input port and output port (not necessarily same size or shape)"""
-    def __init__(self, filename, k0, volume_names, volume_permittivities, pec_name, ip_surface_names, ip_boundary_name, ip_permittivities, op_surface_names, op_boundary_name, op_permittivities, p1_ip=None, p2_ip=None, p1_op=None, p2_op=None):
+    def __init__(self, filename, k0, volume_names, volume_permittivities, pec_name, abc_name, ip_surface_names, ip_boundary_name, ip_permittivities, op_surface_names, op_boundary_name, op_permittivities, p1_ip=None, p2_ip=None, p1_op=None, p2_op=None):
         """
         Constructor of Waveguide3D.
         :param filename: A string giving the path to the .inp file to be loaded.
@@ -22,6 +22,9 @@ class Waveguide3D:
         different parts of the geometry to have different permittivity values.
         :param volume_permittivities: A list of the relative permittivities of the material for the volumes.
         :param pec_name: A string of the name of the block from cubit containing the PEC surface information.
+        If ``None`` is passed, it will be assumed that there are no PEC walls.
+        :param abc_name: A string of the name of the block from cubit containing the Absorbing Boundary surface information.
+        If ``None`` is passed, it will be assumed that there are no absorbing boundary conditions.
         :param ip_surface_names: A list containing the names of each surface of the mesh in the input port.
         :param ip_boundary_name: A string of the name of the boundary nodes of the mesh for the input port.
         :param ip_permittivities: A list of the relative permittivities of the material for the input port surfaces.
@@ -38,7 +41,7 @@ class Waveguide3D:
         output port. Default = None.
         """
         # Load the mesh
-        self.all_nodes, self.tetrahedrons, self.tets_node_ids, self.all_edges, self.boundary_pec_edge_numbers, self.boundary_input_edge_numbers, self.boundary_output_edge_numbers, self.remap_edge_nums, self.all_edges_map, self.boundary_input_tets, self.boundary_output_tets = load_mesh(filename, volume_names, volume_permittivities, pec_name, ip_surface_names, ip_boundary_name, ip_permittivities, op_surface_names, op_boundary_name, op_permittivities)
+        self.all_nodes, self.tetrahedrons, self.tets_node_ids, self.all_edges, self.boundary_pec_edge_numbers, self.abc_edge_numbers, self.boundary_input_edge_numbers, self.boundary_output_edge_numbers, self.remap_edge_nums, self.all_edges_map, self.boundary_input_tets, self.boundary_output_tets = load_mesh(filename, volume_names, volume_permittivities, pec_name, abc_name, ip_surface_names, ip_boundary_name, ip_permittivities, op_surface_names, op_boundary_name, op_permittivities)
         # Find the minimum and maximum x, y, and z values of the waveguide.
         self.x_min = np.amin(self.all_nodes[:, 0])
         self.x_max = np.amax(self.all_nodes[:, 0])
@@ -85,7 +88,7 @@ class Waveguide3D:
         :param p2_op: If an integration line is desired, ``p2_op`` is the starting point of the line integral on the
         output port. Default = None.
         """
-        return Waveguide3D(filename, k0, ["Tetrahedrons"], [permittivity], "PECWalls", ["InputPort"], "InPortBoundary", [permittivity], ["OutputPort"], "OutPortBoundary", [permittivity], p1_ip, p2_ip, p1_op, p2_op)
+        return Waveguide3D(filename, k0, ["Tetrahedrons"], [permittivity], "PECWalls", None, ["InputPort"], "InPortBoundary", [permittivity], ["OutputPort"], "OutPortBoundary", [permittivity], p1_ip, p2_ip, p1_op, p2_op)
 
     def solve(self, mode=0):
         """
@@ -754,7 +757,7 @@ p1ip, p2ip = np.array([0, 0.0008]), np.array([0, 0])
 p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
 # Create the microstrip-line simulated at f = 1 MHz
 # waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 0.0209584502195, vn, vp, pn, ipn, ipbn, ipp, opn, opbn, opp)
-waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 2.0, vn, vp, pn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
+waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 2.0, vn, vp, pn, None, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
 # print("input port betas")
 # print(waveguide.input_port.betas)
 # print("output port betas")

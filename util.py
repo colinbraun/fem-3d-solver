@@ -312,7 +312,7 @@ def load_mesh_block(filename, block_name):
         return data
 
 
-def load_mesh(filename, volume_names, volume_permittivities, pec_name, ip_surface_names, ip_boundary_name, ip_permittivities, op_surface_names, op_boundary_name, op_permittivities):
+def load_mesh(filename, volume_names, volume_permittivities, pec_name, abc_name, ip_surface_names, ip_boundary_name, ip_permittivities, op_surface_names, op_boundary_name, op_permittivities):
     """
     Load a mesh from a file. Must have at least 2 blocks, one containing all surface element_to_node_conn, the other the edge ones.
     :param filename: The name of the mesh file (a .inp a.k.a. abaqus file) to load
@@ -320,6 +320,9 @@ def load_mesh(filename, volume_names, volume_permittivities, pec_name, ip_surfac
     different parts of the geometry to have different permittivity values.
     :param volume_permittivities: A list of the relative permittivities of the material for the volumes.
     :param pec_name: A string of the name of the block from cubit containing the PEC surface information.
+    If ``None`` is passed, it will be assumed that there are no PEC walls.
+    :param abc_name: A string of the name of the block from cubit containing the Absorbing Boundary surface information.
+    If ``None`` is passed, it will be assumed that there are no absorbing boundary conditions.
     :param ip_surface_names: A list containing the names of each surface of the mesh in the input port.
     :param ip_boundary_name: A string of the name of the boundary nodes of the mesh for the input port.
     :param ip_permittivities: A list of the relative permittivities of the material for the input port surfaces.
@@ -384,9 +387,21 @@ def load_mesh(filename, volume_names, volume_permittivities, pec_name, ip_surfac
     TriangleElement.all_edges = all_edges
 
     # Load the PEC Wall triangle elements
-    boundary_pec_elements = load_mesh_block(filename, pec_name)
-    boundary_pec_triangles, boundary_pec_edges = construct_triangles_from_surface(boundary_pec_elements, all_edges_map)
-    boundary_pec_edge_numbers = set(all_edges_map[edge] for edge in boundary_pec_edges)
+    if pec_name is None:
+        # If there are no PEC walls anywhere, just create an empty set
+        boundary_pec_edge_numbers = set()
+    else:
+        boundary_pec_elements = load_mesh_block(filename, pec_name)
+        _, boundary_pec_edges = construct_triangles_from_surface(boundary_pec_elements, all_edges_map)
+        boundary_pec_edge_numbers = set(all_edges_map[edge] for edge in boundary_pec_edges)
+    # Load the Absorbing Boundary triangle elements
+    if abc_name is None:
+        # If there are no ABC walls anywhere, just create an empty set
+        abc_edge_numbers = set()
+    else:
+        abc_elements = load_mesh_block(filename, abc_name)
+        _, abc_edges = construct_triangles_from_surface(abc_elements, all_edges_map)
+        abc_edge_numbers = set(all_edges_map[edge] for edge in abc_edges)
     # Load the InputPort triangle elements
     boundary_input_edge_numbers = set()
     for ip_surface_name in ip_surface_names:
@@ -441,7 +456,7 @@ def load_mesh(filename, volume_names, volume_permittivities, pec_name, ip_surfac
     # all_edges_map: A map from an Edge object to its global edge number
     # boundary_input_tets: A set of tetrahedrons that have a face on the boundary of the input port
     # boundary_output_tets: A set of tetrahedrons that have a face on the boundary of the output port
-    return all_nodes, all_tets, tets_node_ids, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_tets, boundary_output_tets
+    return all_nodes, all_tets, tets_node_ids, all_edges, boundary_pec_edge_numbers, abc_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_tets, boundary_output_tets
 
 
 def area(x1, y1, x2, y2, x3, y3):
