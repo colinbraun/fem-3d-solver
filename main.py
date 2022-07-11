@@ -1,4 +1,4 @@
-from util import load_mesh, Edge, quad_eval, quad_sample_points, where
+from util import load_mesh, Edge, quad_eval, quad_sample_points, where, plot_csv
 import numpy as np
 from iwaveguide.waveguide import Waveguide
 from scipy.linalg import inv
@@ -13,12 +13,21 @@ plt.ion()
 
 class Waveguide3D:
     """Class representing a 3D waveguide with an input port and output port (not necessarily same size or shape)"""
-    def __init__(self, filename, k0=4., permittivity=1., p1_ip=None, p2_ip=None, p1_op=None, p2_op=None):
+    def __init__(self, filename, k0, volume_names, volume_permittivities, pec_name, ip_surface_names, ip_boundary_name, ip_permittivities, op_surface_names, op_boundary_name, op_permittivities, p1_ip=None, p2_ip=None, p1_op=None, p2_op=None):
         """
         Constructor of Waveguide3D.
         :param filename: A string giving the path to the .inp file to be loaded.
         :param k0: The k0 value (frequency) to operate at.
-        :param permittivity: The relative permittivity of the material
+        :param volume_names: An iterable containing the names of the blocks from cubit for each volume. This allows for
+        different parts of the geometry to have different permittivity values.
+        :param volume_permittivities: A list of the relative permittivities of the material for the volumes.
+        :param pec_name: A string of the name of the block from cubit containing the PEC surface information.
+        :param ip_surface_names: A list containing the names of each surface of the mesh in the input port.
+        :param ip_boundary_name: A string of the name of the boundary nodes of the mesh for the input port.
+        :param ip_permittivities: A list of the relative permittivities of the material for the input port surfaces.
+        :param op_surface_names: A list containing the names of each surface of the mesh in the output port.
+        :param op_boundary_name: A string of the name of the boundary nodes of the mesh for the output port.
+        :param op_permittivities: A list of the relative permittivities of the material for the output port surfaces.
         :param p1_ip: If an integration line is desired, ``p1_ip`` is the starting point of the line integral on the
         input port. Default = None.
         :param p2_ip: If an integration line is desired, ``p2_ip`` is the starting point of the line integral on the
@@ -29,7 +38,7 @@ class Waveguide3D:
         output port. Default = None.
         """
         # Load the mesh
-        self.all_nodes, self.tetrahedrons, self.tets_node_ids, self.all_edges, self.boundary_pec_edge_numbers, self.boundary_input_edge_numbers, self.boundary_output_edge_numbers, self.remap_edge_nums, self.all_edges_map, self.boundary_input_tets, self.boundary_output_tets = load_mesh(filename, permittivity)
+        self.all_nodes, self.tetrahedrons, self.tets_node_ids, self.all_edges, self.boundary_pec_edge_numbers, self.boundary_input_edge_numbers, self.boundary_output_edge_numbers, self.remap_edge_nums, self.all_edges_map, self.boundary_input_tets, self.boundary_output_tets = load_mesh(filename, volume_names, volume_permittivities, pec_name, ip_surface_names, ip_boundary_name, ip_permittivities, op_surface_names, op_boundary_name, op_permittivities)
         # Find the minimum and maximum x, y, and z values of the waveguide.
         self.x_min = np.amin(self.all_nodes[:, 0])
         self.x_max = np.amax(self.all_nodes[:, 0])
@@ -44,20 +53,39 @@ class Waveguide3D:
         self.K = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)], dtype=complex)
         self.b = np.zeros([len(self.remap_edge_nums)], dtype=complex)
         # Create a Waveguide object of the input port
-        self.input_port = Waveguide(filename, ["InputPort"], "InPortBoundary", [permittivity], p1_ip, p2_ip)
+        self.input_port = Waveguide(filename, ip_surface_names, ip_boundary_name, ip_permittivities, p1_ip, p2_ip)
         # Set its mode to be the specified propagating mode (0 -> TE10, 4 -> TM11)
         self.input_port.set_mode_index(0)
         # Solve the waveguide for k0 = 4 (this will work for TE10 mode excitation, but won't excite other modes)
         self.input_port.solve_k0(k0)
         # TODO: Change this to have an output port that differs from the input port. Will have to solve it too.
         # self.output_port = self.input_port
-        self.output_port = Waveguide(filename, ["OutputPort"], "OutPortBoundary", [permittivity], p1_op, p2_op)
+        self.output_port = Waveguide(filename, op_surface_names, op_boundary_name, op_permittivities, p1_op, p2_op)
         self.output_port.set_mode_index(0)
         self.output_port.solve_k0(k0)
         # Create an empty coefficient array. This is loaded by solve()
         self.edge_coefficients = np.zeros([len(self.remap_edge_nums), len(self.remap_edge_nums)])
         # Placeholders
         self.Ex, self.Ey, self.Ez = None, None, None
+
+    @staticmethod
+    def construct_simple(filename, k0=4., permittivity=1., p1_ip=None, p2_ip=None, p1_op=None, p2_op=None):
+        """
+        Simple construction of a ``Waveguide3D`` object, avoiding needing to specify the exhausting details.
+        This is essentially the old constructor.
+        :param filename: A string giving the path to the .inp file to be loaded.
+        :param k0: The k0 value (frequency) to operate at.
+        :param permittivity: The relative permittivity of the material
+        :param p1_ip: If an integration line is desired, ``p1_ip`` is the starting point of the line integral on the
+        input port. Default = None.
+        :param p2_ip: If an integration line is desired, ``p2_ip`` is the starting point of the line integral on the
+        input port. Default = None.
+        :param p1_op: If an integration line is desired, ``p1_op`` is the starting point of the line integral on the
+        output port. Default = None.
+        :param p2_op: If an integration line is desired, ``p2_op`` is the starting point of the line integral on the
+        output port. Default = None.
+        """
+        return Waveguide3D(filename, k0, ["Tetrahedrons"], [permittivity], "PECWalls", ["InputPort"], "InPortBoundary", [permittivity], ["OutputPort"], "OutPortBoundary", [permittivity], p1_ip, p2_ip, p1_op, p2_op)
 
     def solve(self, mode=0):
         """
@@ -683,40 +711,53 @@ class Waveguide3D:
 
 
 # Generate S21 results for a range of k0 (frequencies)
-num_k0s = 10
-k0s = np.linspace(4, 4.5, num_k0s)
-s21s = np.zeros([num_k0s])
-s11s = np.zeros([num_k0s])
-phases = np.zeros([num_k0s])
-expected_phases = np.zeros([num_k0s])
-for i, k0 in enumerate(k0s):
-    print(f"Starting iteration {i} of {len(k0s)} for k0 = {k0}")
-    waveguide = Waveguide3D("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", k0, 1, [0, -0.25], [0, 0.25], [0, -0.25], [0, 0.25])
-    waveguide.solve()
-    lam = 2 * pi / waveguide.input_port.get_selected_beta()
-    z_length = waveguide.z_max - waveguide.z_min
-    expected_phases[i] = (z_length / lam * 360) % 360
-    s11 = waveguide.compute_s11()
-    s11s[i] = abs(s11)
-    s21 = waveguide.compute_s21()
-    s21s[i] = abs(s21)
-    phases[i] = atan2(s21.imag, s21.real) / 2 / pi * 360
-    if phases[i] < 0:
-        phases[i] += 360
-    waveguide.output_port.plot_fields()
-    plt.savefig("temp.png")
-    plt.close()
-plt.plot(k0s, phases)
-# plt.plot(k0s, expected_phases)
-plt.savefig("s21_phases6.png")
-plt.close()
+# num_k0s = 10
+# k0s = np.linspace(4, 4.5, num_k0s)
+# s21s = np.zeros([num_k0s])
+# s11s = np.zeros([num_k0s])
+# phases = np.zeros([num_k0s])
+# expected_phases = np.zeros([num_k0s])
+# for i, k0 in enumerate(k0s):
+#     print(f"Starting iteration {i+1} of {len(k0s)} for k0 = {k0}")
+#     waveguide = Waveguide3D("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", k0, 1, [0, -0.25], [0, 0.25], [0, -0.25], [0, 0.25])
+#     waveguide.solve()
+#     lam = 2 * pi / waveguide.input_port.get_selected_beta()
+#     z_length = waveguide.z_max - waveguide.z_min
+#     expected_phases[i] = (z_length / lam * 360) % 360
+#     s11 = waveguide.compute_s11()
+#     s11s[i] = abs(s11)
+#     s21 = waveguide.compute_s21()
+#     s21s[i] = abs(s21)
+#     phases[i] = atan2(s21.imag, s21.real) / 2 / pi * 360
+#     if phases[i] < 0:
+#         phases[i] += 360
+# plt.plot(k0s * c / 2 / pi, phases)
+# plot_csv("../scratch/s21_phases.csv", 1E6, 1, False)
+# plt.xlabel("Frequency (Hz)")
+# plt.ylabel("Phase (degrees)")
+# plt.legend(["FEM Code", "HFSS"])
+# # plt.plot(k0s, expected_phases)
+# plt.savefig("s21_phases_final.png")
+# plt.close()
 # waveguide = Waveguide3D("rectangular_waveguide_3d_less_coarse.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220608.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220608_coarse.inp")
 # waveguide = Waveguide3D("rectangular_waveguide_20220615.inp")
 # The most common test so far:
 # waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
-waveguide = Waveguide3D("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4.5)
+# waveguide = Waveguide3D.construct_simple("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
+# waveguide = Waveguide3D("rectangular_waveguide_12000tets_correct_orientation_rotated_20220705.inp", 8)
+# Create the microstrip-line simulated at f = 1 MHz
+vn, vp, pn = ["TetrahedronsVacuum", "TetrahedronsSubstrate"], [1, 4.5], "PECWalls"
+ipn, ipbn, ipp = ["InputPortVacuum", "InputPortSubstrate"], "InPortPEC", [1, 4.5]
+opn, opbn, opp = ["OutputPortVacuum", "OutputPortSubstrate"], "OutPortPEC", [1, 4.5]
+
+# waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 0.0209584502195, vn, vp, pn, ipn, ipbn, ipp, opn, opbn, opp)
+waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 0.0809584502195, vn, vp, pn, ipn, ipbn, ipp, opn, opbn, opp)
+print("input port betas")
+print(waveguide.input_port.betas)
+print("output port betas")
+print(waveguide.output_port.betas)
 
 # The first non-TEM mode in this coaxial cable of inner rad 0.25, outer rad 1 is k0 = ~1.598, so we choose k0 below that
 # waveguide = Waveguide3D("coaxial_cable_13000tets_20220626.inp", 5)
@@ -731,7 +772,7 @@ waveguide = Waveguide3D("rectangular_waveguide_12000tets_correct_orientation_202
 # waveguide = Waveguide3D("rectangular_waveguide_20220622_40000tets.inp")
 # waveguide.input_port.set_mode_index(0)
 # waveguide.input_port.plot_fields()
-b = waveguide.generate_b_vector(waveguide.input_port, 0)
+# b = waveguide.generate_b_vector(waveguide.input_port, 0)
 start_time = time.time()
 waveguide.solve()
 print(f"Solved in {time.time() - start_time} seconds")
@@ -786,4 +827,11 @@ for i in range(num_phases):
 #     waveguide.plot_fields(plane="xz", offset=0.5, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
 #     plt.savefig(f"images/te10_planexz_y0p5_{floor(i/10)}{i%10}")
 #     plt.close()
+plt.figure()
+for element in waveguide.input_port.connectivity:
+    for node in element.nodes:
+        p = waveguide.input_port.all_nodes[node]
+        plt.scatter(p[0], p[1])
+plt.savefig('port_drawing.png')
+plt.close()
 print("Done creating plots")

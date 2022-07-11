@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import matplotlib.pyplot as plt
 
 
 class Edge:
@@ -311,19 +312,26 @@ def load_mesh_block(filename, block_name):
         return data
 
 
-def load_mesh(filename, permittivity=1):
+def load_mesh(filename, volume_names, volume_permittivities, pec_name, ip_surface_names, ip_boundary_name, ip_permittivities, op_surface_names, op_boundary_name, op_permittivities):
     """
     Load a mesh from a file. Must have at least 2 blocks, one containing all surface element_to_node_conn, the other the edge ones.
     :param filename: The name of the mesh file (a .inp a.k.a. abaqus file) to load
-    :param permittivity: The relative permittivity of the material
+    :param volume_names: An iterable containing the names of the blocks from cubit for each volume. This allows for
+    different parts of the geometry to have different permittivity values.
+    :param volume_permittivities: A list of the relative permittivities of the material for the volumes.
+    :param pec_name: A string of the name of the block from cubit containing the PEC surface information.
+    :param ip_surface_names: A list containing the names of each surface of the mesh in the input port.
+    :param ip_boundary_name: A string of the name of the boundary nodes of the mesh for the input port.
+    :param ip_permittivities: A list of the relative permittivities of the material for the input port surfaces.
+    :param op_surface_names: A list containing the names of each surface of the mesh in the output port.
+    :param op_boundary_name: A string of the name of the boundary nodes of the mesh for the output port.
+    :param op_permittivities: A list of the relative permittivities of the material for the output port surfaces.
     :return: A number of items. See comments at bottom of this function, above the return statement.
     """
     # Load the nodes
     all_nodes = load_mesh_block(filename, "ALLNODES")
     # Make the nodes accessible globally (TODO: Do this differently?)
     TriangleElement.all_nodes = all_nodes
-    # Load the tetrahedrons
-    element_to_node_conn = load_mesh_block(filename, "Tetrahedrons")
     # All the edges (the index is the global edge number, i.e. all_edges[0] gets edge w/ global edge number 0)
     all_edges = []
     TriangleElement.all_edges = all_edges
@@ -335,35 +343,38 @@ def load_mesh(filename, permittivity=1):
 
     # Create a list of tetrahedrons
     tetrahedrons = []
-    # Iterate over all the tetrahedrons
-    for tet in element_to_node_conn:
-        # The set holding the 6 global edge numbers of this tetrahedron
-        tet_edges = set()
-        # Iterate over each triangle face of the tetrahedron
-        for element in (tet.take((0, 1, 2)), tet.take((0, 1, 3)), tet.take((0, 2, 3)), tet.take((1, 2, 3))):
-            # Construct 3 edges
-            edge1 = Edge(element[0], element[1])
-            edge2 = Edge(element[0], element[2])
-            edge3 = Edge(element[1], element[2])
-            # For each of the 3 edges in this element, check if we have created this edge before. If not, create it.
-            for edge in (edge1, edge2, edge3):
-                if edge in all_edges_map:
-                    # We do not want duplicate edges in our "all_edges" (global edge) list
-                    pass
-                else:
-                    # Otherwise, we have not come across this edge before, so add it
-                    all_edges.append(edge)
-                    all_edges_map[edge] = edge_count
-                    edge_count += 1
-            # Get the global edge numbers for these 3 edges
-            edge1_number = all_edges_map[edge1]
-            edge2_number = all_edges_map[edge2]
-            edge3_number = all_edges_map[edge3]
-            tet_edges.add(edge1_number)
-            tet_edges.add(edge2_number)
-            tet_edges.add(edge3_number)
-        # Create the tetrahedron object, converting the global node numbers set to a numpy array
-        tetrahedrons.append(TetrahedralElement(tet, permittivity))
+    for i, volume_name in enumerate(volume_names):
+        # Load the tetrahedrons
+        element_to_node_conn = load_mesh_block(filename, volume_name)
+        # Iterate over all the tetrahedrons
+        for tet in element_to_node_conn:
+            # The set holding the 6 global edge numbers of this tetrahedron
+            tet_edges = set()
+            # Iterate over each triangle face of the tetrahedron
+            for element in (tet.take((0, 1, 2)), tet.take((0, 1, 3)), tet.take((0, 2, 3)), tet.take((1, 2, 3))):
+                # Construct 3 edges
+                edge1 = Edge(element[0], element[1])
+                edge2 = Edge(element[0], element[2])
+                edge3 = Edge(element[1], element[2])
+                # For each of the 3 edges in this element, check if we have created this edge before. If not, create it.
+                for edge in (edge1, edge2, edge3):
+                    if edge in all_edges_map:
+                        # We do not want duplicate edges in our "all_edges" (global edge) list
+                        pass
+                    else:
+                        # Otherwise, we have not come across this edge before, so add it
+                        all_edges.append(edge)
+                        all_edges_map[edge] = edge_count
+                        edge_count += 1
+                # Get the global edge numbers for these 3 edges
+                edge1_number = all_edges_map[edge1]
+                edge2_number = all_edges_map[edge2]
+                edge3_number = all_edges_map[edge3]
+                tet_edges.add(edge1_number)
+                tet_edges.add(edge2_number)
+                tet_edges.add(edge3_number)
+            # Create the tetrahedron object, converting the global node numbers set to a numpy array
+            tetrahedrons.append(TetrahedralElement(tet, volume_permittivities[i]))
 
     # Convert tetrahedrons to numpy array
     all_tets = np.array(tetrahedrons)
@@ -373,17 +384,27 @@ def load_mesh(filename, permittivity=1):
     TriangleElement.all_edges = all_edges
 
     # Load the PEC Wall triangle elements
-    boundary_pec_elements = load_mesh_block(filename, "PECWalls")
+    boundary_pec_elements = load_mesh_block(filename, pec_name)
     boundary_pec_triangles, boundary_pec_edges = construct_triangles_from_surface(boundary_pec_elements, all_edges_map)
     boundary_pec_edge_numbers = set(all_edges_map[edge] for edge in boundary_pec_edges)
     # Load the InputPort triangle elements
-    boundary_input_elements = load_mesh_block(filename, "InputPort")
-    _, boundary_input_edges = construct_triangles_from_surface(boundary_input_elements, all_edges_map)
-    boundary_input_edge_numbers = set(all_edges_map[edge] for edge in boundary_input_edges)
+    boundary_input_edge_numbers = set()
+    for ip_surface_name in ip_surface_names:
+        boundary_input_elements_temp = load_mesh_block(filename, ip_surface_name)
+        _, boundary_input_edges_temp = construct_triangles_from_surface(boundary_input_elements_temp, all_edges_map)
+        boundary_input_edge_numbers.update(set(all_edges_map[edge] for edge in boundary_input_edges_temp))
+    # boundary_input_elements = load_mesh_block(filename, "InputPort")
+    # _, boundary_input_edges = construct_triangles_from_surface(boundary_input_elements, all_edges_map)
+    # boundary_input_edge_numbers = set(all_edges_map[edge] for edge in boundary_input_edges)
     # Load the OutputPort triangle elements
-    boundary_output_elements = load_mesh_block(filename, "OutputPort")
-    _, boundary_output_edges = construct_triangles_from_surface(boundary_output_elements, all_edges_map)
-    boundary_output_edge_numbers = set(all_edges_map[edge] for edge in boundary_output_edges)
+    boundary_output_edge_numbers = set()
+    for op_surface_name in op_surface_names:
+        boundary_output_elements_temp = load_mesh_block(filename, op_surface_name)
+        _, boundary_output_edges_temp = construct_triangles_from_surface(boundary_output_elements_temp, all_edges_map)
+        boundary_output_edge_numbers.update(set(all_edges_map[edge] for edge in boundary_output_edges_temp))
+    # boundary_output_elements = load_mesh_block(filename, "OutputPort")
+    # _, boundary_output_edges = construct_triangles_from_surface(boundary_output_elements, all_edges_map)
+    # boundary_output_edge_numbers = set(all_edges_map[edge] for edge in boundary_output_edges)
 
     # Get a list of tetrahedrons that have a face that lies on the input and output port surfaces
     boundary_input_tets = set()
@@ -419,7 +440,7 @@ def load_mesh(filename, permittivity=1):
     # remap_edge_nums: A map that takes one of the inner edge numbers and maps it to a unique integer
     # all_edges_map: A map from an Edge object to its global edge number
     # boundary_input_tets: A set of tetrahedrons that have a face on the boundary of the input port
-    # boundary_output_tets: A set of tetrahedrons that have a face on the buondary of the output port
+    # boundary_output_tets: A set of tetrahedrons that have a face on the boundary of the output port
     return all_nodes, all_tets, tets_node_ids, all_edges, boundary_pec_edge_numbers, boundary_input_edge_numbers, boundary_output_edge_numbers, remap_edge_nums, all_edges_map, boundary_input_tets, boundary_output_tets
 
 
@@ -443,6 +464,24 @@ def is_inside(pt1, pt2, pt3, x, y):
     if sign((x, y), pt3, pt1) < 0.0:
         return False
     return True
+
+
+def plot_csv(filename, scale_x=1, skiprows=0, new_fig=True):
+    """
+    Plot a CSV file using matplotlib.
+    :param filename: The name of the file to plot.
+    :param scale_x: A factor to scale the x-axis values by. Default = 1 (leave them alone).
+    :param skiprows: The number of rows to skip in the file.
+    :param new_fig: If ``True``, creates a new figure to plot on. Otherwise just calls plt.plot().
+    :return: The figure if one was created.
+    """
+    fig = None
+    if new_fig:
+        fig = plt.figure()
+    data = np.loadtxt(filename, skiprows=skiprows, delimiter=',')
+    data[:, 0] *= scale_x
+    plt.plot(data[:, 0], data[:, 1])
+    return fig
 
 
 def quad_sample_points(n, p1, p2, p3):
