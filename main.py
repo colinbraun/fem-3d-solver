@@ -50,6 +50,7 @@ class Waveguide3D:
         self.z_min = np.amin(self.all_nodes[:, 2])
         self.z_max = np.amax(self.all_nodes[:, 2])
         self.k0 = k0
+        self.f = k0 / 2 / pi * c
         # The angular frequency of operation (from k0)
         self.omega = k0 / sqrt(mu_0 * epsilon_0)
         # Construct empty K and b matrices
@@ -251,6 +252,54 @@ class Waveguide3D:
                             # ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
                             integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
                             self.K[self.remap_edge_nums[edgei], self.remap_edge_nums[edgej]] += self.output_port.get_selected_beta() * integral * 1j
+
+                    elif edgei in self.abc_edge_numbers and edgej in self.abc_edge_numbers:
+                        # Perform the (n_hat x N_i) \dot (n_hat x N_j) integral
+                        # For n_hat = z_hat, this turns out to be the same as N_i \dot N_j, so integral is same as inhomo wg
+                        # Need all 3 nodes first
+                        # Necessary constants from NASA paper eqs. 68-72.
+                        # Need the third point that makes up the face of the input port
+                        found_edge_no = -1
+                        # Search for a different edge on the input port from this tetrahedral element
+                        for edge in tet.edges:
+                            if edge == edgej:
+                                continue
+                            elif edge in self.boundary_output_edge_numbers:
+                                # We found an edge containing the third node, note it
+                                found_edge_no = edge
+                                break
+                        # It is possible we do not find another edge that lies on the input port. We are checking for this here.
+                        if found_edge_no != -1:
+                            found_edge = self.all_edges[found_edge_no]
+                            nodes = np.unique(
+                                np.array([node_ik, node_jk, self.all_nodes[found_edge.node1], self.all_nodes[found_edge.node2]]), axis=0)
+                            if len(nodes) != 3:
+                                raise RuntimeError("Did not find 3 nodes on surface triangle")
+                            # Get two vectors that lie in the triangular surface
+                            v1 = nodes[1] - nodes[0]
+                            v2 = nodes[2] - nodes[0]
+                            # We SHOULD find the n_hat that points out of the surface, but inward pointing will cancel anyway
+                            n_hat = np.cross(v1, v2)
+                            # Normalize n_hat
+                            n_hat /= np.linalg.norm(n_hat)
+                            sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
+                            N_i = np.zeros([len(sample_points), 3])
+                            N_i[:, 0] = Axl + Bxl * sample_points[:, 1] + Cxl * sample_points[:, 2]
+                            N_i[:, 1] = Ayl + Byl * sample_points[:, 0] + Cyl * sample_points[:, 2]
+                            N_i[:, 2] = Azl + Bzl * sample_points[:, 0] + Czl * sample_points[:, 1]
+                            N_i = N_i * edge1.length / 36 / tet.volume**2
+                            n_hat_x_ni = np.array([np.cross(n_hat, vec) for vec in N_i])
+                            N_j = np.zeros([len(sample_points), 3])
+                            N_j[:, 0] = Axk + Bxk * sample_points[:, 1] + Cxk * sample_points[:, 2]
+                            N_j[:, 1] = Ayk + Byk * sample_points[:, 0] + Cyk * sample_points[:, 2]
+                            N_j[:, 2] = Azk + Bzk * sample_points[:, 0] + Czk * sample_points[:, 1]
+                            N_j = N_j * edge2.length / 36 / tet.volume**2
+                            n_hat_x_nj = np.array([np.cross(n_hat, vec) for vec in N_j])
+                            dotted = n_hat_x_ni[:, 0] * n_hat_x_nj[:, 0] + n_hat_x_ni[:, 1] * n_hat_x_nj[:, 1] + n_hat_x_ni[:, 2] * n_hat_x_nj[:, 2]
+                            dotted = np.reshape(dotted, [len(dotted), 1])
+                            # ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
+                            integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
+                            self.K[self.remap_edge_nums[edgei], self.remap_edge_nums[edgej]] += 2 * pi * self.f / sqrt(epsilon_0 * mu_0) * integral * 1j
                     # Otherwise we are working with an inner edge (not on boundary). Do necessary integral.
                     # Currently removing this else unless it is found that it is needed
                     # else:
@@ -751,13 +800,16 @@ class Waveguide3D:
 # waveguide = Waveguide3D.construct_simple("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
 # waveguide = Waveguide3D("rectangular_waveguide_12000tets_correct_orientation_rotated_20220705.inp", 8)
 vn, vp, pn = ["TetrahedronsVacuum", "TetrahedronsSubstrate"], [1, 4.5], "PECWalls"
+abcn = "ABC"
 ipn, ipbn, ipp = ["InputPortVacuum", "InputPortSubstrate"], "InPortPEC", [1, 4.5]
 opn, opbn, opp = ["OutputPortVacuum", "OutputPortSubstrate"], "OutPortPEC", [1, 4.5]
 p1ip, p2ip = np.array([0, 0.0008]), np.array([0, 0])
 p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
 # Create the microstrip-line simulated at f = 1 MHz
 # waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 0.0209584502195, vn, vp, pn, ipn, ipbn, ipp, opn, opbn, opp)
-waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 2.0, vn, vp, pn, None, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
+waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 4, vn, vp, pn, None, ipn, ipbn, ipp, opn, opbn, opp)
+# waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 440, vn, vp, pn, None, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
+# waveguide = Waveguide3D("microstrip_line_44000tets_with_abc_20220711.inp", 4.0, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
 # print("input port betas")
 # print(waveguide.input_port.betas)
 # print("output port betas")
@@ -808,7 +860,7 @@ for i in range(num_phases):
     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-25E-8, vmax=25E-8)
     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=vmin, vmax=vmax, use_cached_fields=True)
-    waveguide.plot_fields(plane="xz", offset=y_length/2, phase=i*2*pi/num_phases, vmin=vmin, vmax=vmax, use_cached_fields=True)
+    waveguide.plot_fields(plane="xz", offset=y_length/2 + 0.00089, phase=i*2*pi/num_phases, vmin=vmin, vmax=vmax, use_cached_fields=True)
     plt.savefig(f"images/te10_planexz_y0p25_{floor(i/10)}{i%10}")
     plt.close()
 # waveguide.Ex = None
