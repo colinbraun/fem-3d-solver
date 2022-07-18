@@ -2,6 +2,8 @@ from util import load_mesh, Edge, quad_eval, quad_sample_points, where, plot_csv
 import numpy as np
 from iwaveguide.waveguide import Waveguide
 from scipy.linalg import inv
+import scipy.sparse as sparse
+from scipy.sparse.linalg import gmres
 import matplotlib.pyplot as plt
 from math import floor, e, pi, atan2, sqrt
 from scipy.constants import c, mu_0, epsilon_0
@@ -41,7 +43,9 @@ class Waveguide3D:
         output port. Default = None.
         """
         # Load the mesh
+        start_time = time.time()
         self.all_nodes, self.tetrahedrons, self.tets_node_ids, self.all_edges, self.boundary_pec_edge_numbers, self.abc_edge_numbers, self.boundary_input_edge_numbers, self.boundary_output_edge_numbers, self.remap_edge_nums, self.all_edges_map, self.boundary_input_tets, self.boundary_output_tets = load_mesh(filename, volume_names, volume_permittivities, pec_name, abc_name, ip_surface_names, ip_boundary_name, ip_permittivities, op_surface_names, op_boundary_name, op_permittivities)
+        print(f"Mesh loaded in {time.time() - start_time} seconds")
         # Find the minimum and maximum x, y, and z values of the waveguide.
         self.x_min = np.amin(self.all_nodes[:, 0])
         self.x_max = np.amax(self.all_nodes[:, 0])
@@ -97,6 +101,7 @@ class Waveguide3D:
         :param mode: The mode to excite at the input port. Default = 0 (lowest cut-off frequency mode).
         :return: The edge coefficients to be applied to the interpolating functions (indexed by global edge number).
         """
+        start_time = time.time()
         print("Begin constructing equation matrix")
         # Create the b vector
         self.b = self.generate_b_vector(self.input_port, mode)
@@ -300,6 +305,7 @@ class Waveguide3D:
                             # ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
                             integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
                             self.K[self.remap_edge_nums[edgei], self.remap_edge_nums[edgej]] += 2 * pi * self.f / sqrt(epsilon_0 * mu_0) * integral * 1j
+                            continue
                     # Otherwise we are working with an inner edge (not on boundary). Do necessary integral.
                     # Currently removing this else unless it is found that it is needed
                     # else:
@@ -324,10 +330,14 @@ class Waveguide3D:
                     index1 = self.remap_edge_nums[edgei]
                     index2 = self.remap_edge_nums[edgej]
                     self.K[index1, index2] += k_value
-        print("Finished constructing equation matrix")
+        print(f"Constructed equation matrix in {time.time() - start_time} seconds")
         print("Solving equation matrix")
+        start_time = time.time()
+        # self.s_A = sparse.csr_matrix(self.K)
+        # self.edge_coefficients, info = gmres(self.s_A, self.b, tol=1E-6, callback=gmres_cb, callback_type="pr_norm")
+        # print(f"gmres info: {info}")
         self.edge_coefficients = np.dot(inv(self.K), self.b)
-        print("Finished solving equation matrix")
+        print(f"Solved equation matrix in {time.time() - start_time} seconds")
         return self.edge_coefficients
 
     def compute_s11(self):
@@ -762,6 +772,16 @@ class Waveguide3D:
         return fig
 
 
+count = 0
+
+
+def gmres_cb(pr_norm):
+    global count
+    print(f"Iteration {count}")
+    count += 1
+    print(f"pr_norm = {pr_norm}")
+
+
 # Generate S21 results for a range of k0 (frequencies)
 # num_k0s = 10
 # k0s = np.linspace(4, 4.5, num_k0s)
@@ -807,8 +827,8 @@ p1ip, p2ip = np.array([0, 0.0008]), np.array([0, 0])
 p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
 # Create the microstrip-line simulated at f = 1 MHz
 # waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 0.0209584502195, vn, vp, pn, ipn, ipbn, ipp, opn, opbn, opp)
-waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 4, vn, vp, pn, None, ipn, ipbn, ipp, opn, opbn, opp)
-# waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 440, vn, vp, pn, None, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
+# waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 4, vn, vp, pn, None, ipn, ipbn, ipp, opn, opbn, opp)
+waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 220, vn, vp, pn, None, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
 # waveguide = Waveguide3D("microstrip_line_44000tets_with_abc_20220711.inp", 4.0, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
 # print("input port betas")
 # print(waveguide.input_port.betas)
@@ -847,20 +867,23 @@ y_length = waveguide.y_max - waveguide.y_min
 # vmax = 3E-6
 # vmin = -2E-7
 # vmax = 2E-7
-vmin = None
-vmax = None
+waveguide.Ex = None
+vmin = -0.03
+vmax = 0.03
 num_phases = 50
 for i in range(num_phases):
     waveguide.plot_fields(plane="xy", offset=z_length/2, phase=i*2*pi/num_phases, use_cached_fields=True, vmin=vmin, vmax=vmax)
     # plt.savefig(f"images/te10_planexy_{floor(i/10)}{i%10}")
     plt.savefig(f"images/tem_planexy_{floor(i/10)}{i%10}")
     plt.close()
+vmin = -0.12
+vmax = 0.12
 waveguide.Ex = None
 for i in range(num_phases):
     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-25E-8, vmax=25E-8)
     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=-3E-8, vmax=3E-8, use_cached_fields=True)
     # waveguide.plot_fields(plane="xz", offset=0.25, phase=i*2*pi/num_phases, vmin=vmin, vmax=vmax, use_cached_fields=True)
-    waveguide.plot_fields(plane="xz", offset=y_length/2 + 0.00089, phase=i*2*pi/num_phases, vmin=vmin, vmax=vmax, use_cached_fields=True)
+    waveguide.plot_fields(plane="xz", offset=y_length/2 + 0.0004, phase=i*2*pi/num_phases, vmin=vmin, vmax=vmax, use_cached_fields=True)
     plt.savefig(f"images/te10_planexz_y0p25_{floor(i/10)}{i%10}")
     plt.close()
 # waveguide.Ex = None
