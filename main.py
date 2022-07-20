@@ -3,7 +3,7 @@ import numpy as np
 from iwaveguide.waveguide import Waveguide
 from scipy.linalg import inv
 import scipy.sparse as sparse
-from scipy.sparse.linalg import gmres
+from scipy.sparse.linalg import gmres, spilu
 import matplotlib.pyplot as plt
 from math import floor, e, pi, atan2, sqrt
 from scipy.constants import c, mu_0, epsilon_0
@@ -334,7 +334,8 @@ class Waveguide3D:
         print("Solving equation matrix")
         start_time = time.time()
         # self.s_A = sparse.csr_matrix(self.K)
-        # self.edge_coefficients, info = gmres(self.s_A, self.b, tol=1E-6, callback=gmres_cb, callback_type="pr_norm")
+        # precon = spilu(self.s_A)
+        # self.edge_coefficients, info = gmres(self.s_A, self.b, tol=1E-6, callback=gmres_cb, callback_type="pr_norm", M=precon)
         # print(f"gmres info: {info}")
         self.edge_coefficients = np.dot(inv(self.K), self.b)
         print(f"Solved equation matrix in {time.time() - start_time} seconds")
