@@ -294,6 +294,9 @@ def load_mesh_block(filename, block_name):
         # Go until we get to named section
         while block_name not in line:
             count += 1
+            if count == len(lines):
+                print(f"Warning: Could not find block with name '{block_name}' in {filename}. Returning empty array.")
+                return np.array([])
             line = lines[count]
         # Skip over the line with the block_name in it
         count += 1
