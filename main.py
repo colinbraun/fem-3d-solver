@@ -765,9 +765,53 @@ class Waveguide3D:
             axis1, axis2 = np.meshgrid(x_points, y_points)
             skip = (slice(None, None, 5), slice(None, None, 5))
             field_skip = (0, slice(None, None, 5), slice(None, None, 5))
+            # Correct the orientation. TODO: Determine if this is necessary for the other planes
+            Ez = np.flip(Ez, axis=1)
             plt.imshow(Ez[0, :, :], extent=[self.x_min, self.x_max, self.y_min, self.y_max], cmap="cividis", vmin=vmin, vmax=vmax)
             plt.colorbar(label="Ez")
             plt.quiver(axis1[skip], axis2[skip], Ex[field_skip], Ey[field_skip], color="black")
+        else:
+            raise RuntimeError(f"Invalid argument for plane '{plane}'. Must be one of 'xy', 'xz', or 'yz'.")
+        return fig
+
+    def plot_one_field(self, field, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1, phase=0., vmin=None, vmax=None, use_cached_fields=False):
+        """
+        Plot the fields in the selected plane. Note that field plotting is expensive due to needing to locate which
+        tetrahedron each point lies in. Finer meshes may need to use fewer sample points.
+        :param field: A string selecting which field to plot. One of "Ex", "Ey", or "Ez".
+        :param num_axis1_points: The number of points to compute the fields for along the first axis in the plane.
+        :param num_axis2_points: The number of y points to compute the fields for along the second axis in the plane.
+        :param plane: One of {"xy", "xz", "yz"} to select which plane to take a cut of.
+        :param offset: The offset from the edge of the geometry in the direction perpendicular to the plane to calc at.
+        :param phase: The phase in radians to calculate the fields at.
+        :param use_cached_fields: If ``True``, do not recompute the fields, just apply the phase and plot the result.
+        :return: The figure containing all the field data (the result of running plt.figure()).
+        """
+        if not use_cached_fields or self.Ex is None or self.Ey is None or self.Ez is None:
+            self.Ex, self.Ey, self.Ez = self.get_fields_in_plane(num_axis1_points, num_axis2_points, plane, offset)
+        phase_shift = e**(-1j*phase)
+        Ex, Ey, Ez = np.real(phase_shift*self.Ex), np.real(phase_shift*self.Ey), np.real(phase_shift*self.Ez)
+        if field == "Ex":
+            E_plot = Ex
+        elif field == "Ey":
+            E_plot = Ey
+        elif field == "Ez":
+            E_plot = Ez
+        else:
+            raise ValueError(f"Field {field} must be one of 'Ex', 'Ey', or 'Ez'.")
+        fig = plt.figure()
+        plt.title(f"Fields in {plane.upper()}-plane, offset = {round(offset, 3)}")
+        if plane.upper() == "YZ":
+            plt.imshow(E_plot[:, :, 0], extent=[self.y_min, self.y_max, self.z_min, self.z_max], cmap="cividis", vmin=vmin, vmax=vmax)
+            plt.colorbar(label=field)
+        elif plane.upper() == "XZ":
+            plt.imshow(E_plot[:, 0, :], extent=[self.x_min, self.x_max, self.z_min, self.z_max], cmap="cividis", vmin=vmin, vmax=vmax)
+            plt.colorbar(label=field)
+        elif plane.upper() == "XY":
+            # Correct the orientation. TODO: Determine if this is necessary for the other planes
+            E_plot = np.flip(E_plot, axis=1)
+            plt.imshow(E_plot[0, :, :], extent=[self.x_min, self.x_max, self.y_min, self.y_max], cmap="cividis", vmin=vmin, vmax=vmax)
+            plt.colorbar(label=field)
         else:
             raise RuntimeError(f"Invalid argument for plane '{plane}'. Must be one of 'xy', 'xz', or 'yz'.")
         return fig
@@ -830,9 +874,9 @@ p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
 # waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 0.0209584502195, vn, vp, pn, ipn, ipbn, ipp, opn, opbn, opp)
 # waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 4, vn, vp, pn, None, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
 # waveguide = Waveguide3D("microstrip_line_44000tets_20220710.inp", 220, vn, vp, pn, None, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
-waveguide = Waveguide3D("microstrip_line_44000tets_with_abc_20220711.inp", 220, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
+# waveguide = Waveguide3D("microstrip_line_44000tets_with_abc_20220711.inp", 220, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
 # waveguide = Waveguide3D("../cubit_meshes/fixed_abc_mesh.inp", 220, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
-# waveguide = Waveguide3D("../cubit_meshes/fixed_pec_mesh.inp", 220, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
+waveguide = Waveguide3D("../cubit_meshes/fixed_pec_mesh.inp", 2.09585, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
 # print("input port betas")
 # print(waveguide.input_port.betas)
 # print("output port betas")
@@ -920,5 +964,15 @@ for element in waveguide.input_port.connectivity:
         p = waveguide.input_port.all_nodes[node]
         plt.scatter(p[0], p[1])
 plt.savefig('port_drawing.png')
+plt.close()
+waveguide.plot_one_field("Ex", offset=z_length/2)
+plt.savefig("test_top_bot.png")
+plt.close()
+
+waveguide.plot_one_field("Ex", offset=z_length/2)
+plt.savefig("Ex_planexy_center.png")
+plt.close()
+waveguide.plot_one_field("Ey", offset=z_length/2)
+plt.savefig("Ey_planexy_center.png")
 plt.close()
 print("Done creating plots")
