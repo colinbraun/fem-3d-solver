@@ -726,7 +726,7 @@ class Waveguide3D:
         print("Finished calculating field data")
         return Ex, Ey, Ez
 
-    def plot_fields(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1, phase=0., vmin=None, vmax=None, use_cached_fields=False):
+    def plot_fields(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1, phase=0., vmin=None, vmax=None, use_cached_fields=False, normalize=False):
         """
         Plot the fields in the selected plane. Note that field plotting is expensive due to needing to locate which
         tetrahedron each point lies in. Finer meshes may need to use fewer sample points.
@@ -736,6 +736,8 @@ class Waveguide3D:
         :param offset: The offset from the edge of the geometry in the direction perpendicular to the plane to calc at.
         :param phase: The phase in radians to calculate the fields at.
         :param use_cached_fields: If ``True``, do not recompute the fields, just apply the phase and plot the result.
+        :param normalize: If ``True``, normalize the maximum field values to 1. Note this causes a loss in the meaning
+        of the relative magnitudes of Ex, Ey, Ez, since they are each separately normalized.
         :return: The figure containing all the field data (the result of running plt.figure()).
         """
         x_points = [self.x_min+offset] if plane.upper() == "YZ" else np.linspace(self.x_min, self.x_max, num_axis1_points)
@@ -745,6 +747,10 @@ class Waveguide3D:
             self.Ex, self.Ey, self.Ez = self.get_fields_in_plane(num_axis1_points, num_axis2_points, plane, offset)
         phase_shift = e**(-1j*phase)
         Ex, Ey, Ez = np.real(phase_shift*self.Ex), np.real(phase_shift*self.Ey), np.real(phase_shift*self.Ez)
+        if normalize:
+            Ex /= np.amax(np.abs(Ex))
+            Ey /= np.amax(np.abs(Ey))
+            Ez /= np.amax(np.abs(Ez))
         fig = plt.figure()
         plt.title(f"Fields in {plane.upper()}-plane, offset = {round(offset, 3)}")
         if plane.upper() == "YZ":
@@ -774,7 +780,7 @@ class Waveguide3D:
             raise RuntimeError(f"Invalid argument for plane '{plane}'. Must be one of 'xy', 'xz', or 'yz'.")
         return fig
 
-    def plot_one_field(self, field, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1, phase=0., vmin=None, vmax=None, use_cached_fields=False):
+    def plot_one_field(self, field, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1, phase=0., vmin=None, vmax=None, use_cached_fields=False, normalize=False):
         """
         Plot the fields in the selected plane. Note that field plotting is expensive due to needing to locate which
         tetrahedron each point lies in. Finer meshes may need to use fewer sample points.
@@ -785,6 +791,8 @@ class Waveguide3D:
         :param offset: The offset from the edge of the geometry in the direction perpendicular to the plane to calc at.
         :param phase: The phase in radians to calculate the fields at.
         :param use_cached_fields: If ``True``, do not recompute the fields, just apply the phase and plot the result.
+        :param normalize: If ``True``, normalize the maximum field values to 1. Note this causes a loss in the meaning
+        of the relative magnitudes of Ex, Ey, Ez, since they are each separately normalized.
         :return: The figure containing all the field data (the result of running plt.figure()).
         """
         if not use_cached_fields or self.Ex is None or self.Ey is None or self.Ez is None:
@@ -799,6 +807,8 @@ class Waveguide3D:
             E_plot = Ez
         else:
             raise ValueError(f"Field {field} must be one of 'Ex', 'Ey', or 'Ez'.")
+        if normalize:
+            E_plot /= np.amax(np.abs(E_plot))
         fig = plt.figure()
         plt.title(f"Fields in {plane.upper()}-plane, offset = {round(offset, 3)}")
         if plane.upper() == "YZ":
@@ -970,10 +980,10 @@ waveguide.plot_one_field("Ex", offset=z_length/2)
 plt.savefig("test_top_bot.png")
 plt.close()
 
-# waveguide.plot_one_field("Ex", offset=z_length/2)
-# plt.savefig("Ex_planexy_center_10GHz.png")
-# plt.close()
-# waveguide.plot_one_field("Ey", offset=z_length/2)
-# plt.savefig("Ey_planexy_center_10GHz.png")
-# plt.close()
+waveguide.plot_one_field("Ex", offset=z_length/2, normalize=True)
+plt.savefig("Ex_planexy_center.png")
+plt.close()
+waveguide.plot_one_field("Ey", offset=z_length/2, normalize=True)
+plt.savefig("Ey_planexy_center.png")
+plt.close()
 print("Done creating plots")
