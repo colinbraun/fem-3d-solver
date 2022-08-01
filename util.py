@@ -502,6 +502,28 @@ def plot_csv(filename, scale_x=1, skiprows=0, new_fig=True):
     return fig
 
 
+def plot_phases_csv(filename, scale_x=1, skiprows=0, new_fig=True):
+    """
+    Plot a CSV file using matplotlib.
+    :param filename: The name of the file to plot.
+    :param scale_x: A factor to scale the x-axis values by. Default = 1 (leave them alone).
+    :param skiprows: The number of rows to skip in the file.
+    :param new_fig: If ``True``, creates a new figure to plot on. Otherwise just calls plt.plot().
+    :return: The figure if one was created.
+    """
+    fig = None
+    if new_fig:
+        fig = plt.figure()
+    data = np.loadtxt(filename, skiprows=skiprows, delimiter=',')
+    data[:, 0] *= scale_x
+    # Ensure the phases are positive
+    for i, value in enumerate(data[:, 1]):
+        if value < 0:
+            data[i, 1] += 360
+    plt.plot(data[:, 0], data[:, 1])
+    return fig
+
+
 def quad_sample_points(n, p1, p2, p3):
     """
     Generate gaussian quadrature sample points for a triangle with points p1, p2, and p3.
