@@ -1,9 +1,8 @@
-# File to test out little pieces of code before using them in main.py
+# File to test out little pieces of code before using them in waveport.py
 import time
 # alternatively, import cupy as np if len(points)>1e7 and GPU
 import numpy as np
-from iwaveguide.waveguide import Waveguide
-from util import quad_eval, quad_sample_points
+from waveport.util import quad_eval, quad_sample_points
 
 
 def foo(x, y, z):

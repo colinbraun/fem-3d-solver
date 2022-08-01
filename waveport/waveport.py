@@ -1,4 +1,4 @@
-from util import load_mesh, Edge, quad_eval, quad_sample_points, where, plot_csv, plot_phases_csv
+from waveport.util import load_mesh, Edge, quad_eval, quad_sample_points, where, plot_csv, plot_phases_csv
 import numpy as np
 from iwaveguide.waveguide import Waveguide
 from scipy.linalg import inv
@@ -869,7 +869,7 @@ for i, k0 in enumerate(k0s):
     #     index += 1
     #     waveguide.output_port.set_mode_index(index)
     # waveguide.solve(index)
-    waveguide = Waveguide3D.construct_simple("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", k0)
+    waveguide = Waveguide3D.construct_simple("../rectangular_waveguide_12000tets_correct_orientation_20220630.inp", k0)
     waveguide.solve()
     lam = 2 * pi / waveguide.input_port.get_selected_beta()
     z_length = waveguide.z_max - waveguide.z_min
