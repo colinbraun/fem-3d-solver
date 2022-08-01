@@ -846,8 +846,8 @@ p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
 # Generate S21 results for a range of k0 (frequencies)
 num_freqs = 10
 freqs = np.linspace(1E6, 100E6, num_freqs)
-# k0s = np.linspace(4, 4.5, num_k0s)
-k0s = freqs * 2 * pi / c
+k0s = np.linspace(4, 4.5, num_freqs)
+# k0s = freqs * 2 * pi / c
 s21s = np.zeros([num_freqs])
 s11s = np.zeros([num_freqs])
 phases = np.zeros([num_freqs])
@@ -857,17 +857,19 @@ for i, k0 in enumerate(k0s):
     # waveguide = Waveguide3D("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", k0, 1, [0, -0.25], [0, 0.25], [0, -0.25], [0, 0.25])
     # waveguide = Waveguide3D("../cubit_meshes/fixed_pec_mesh.inp", k0, vn, vp, pn, abcn, ipn, ipbn, ipp, opn,
     #                         opbn, opp, p1ip, p2ip, p1op, p2op)
-    waveguide = Waveguide3D("../cubit_meshes/fixed_pec_mesh.inp", k0, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn,
-                            opp, p1ip, p2ip, p1op, p2op)
-    index = 0
-    while waveguide.input_port.get_selected_beta() > 10:
-        index += 1
-        waveguide.input_port.set_mode_index(index)
-    index = 0
-    while waveguide.output_port.get_selected_beta() > 10:
-        index += 1
-        waveguide.output_port.set_mode_index(index)
-    waveguide.solve(index)
+    # waveguide = Waveguide3D("../cubit_meshes/fixed_pec_mesh.inp", k0, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn,
+    #                         opp, p1ip, p2ip, p1op, p2op)
+    # index = 0
+    # while waveguide.input_port.get_selected_beta() > 10:
+    #     index += 1
+    #     waveguide.input_port.set_mode_index(index)
+    # index = 0
+    # while waveguide.output_port.get_selected_beta() > 10:
+    #     index += 1
+    #     waveguide.output_port.set_mode_index(index)
+    # waveguide.solve(index)
+    waveguide = Waveguide3D.construct_simple("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", k0)
+    waveguide.solve()
     lam = 2 * pi / waveguide.input_port.get_selected_beta()
     z_length = waveguide.z_max - waveguide.z_min
     expected_phases[i] = (z_length / lam * 360) % 360
@@ -883,31 +885,37 @@ for i, k0 in enumerate(k0s):
     print(f"S21 Mags: {s21s}")
     print(f"S11 Mags: {s11s}")
 
-plt.figure()
-plt.plot(freqs, phases)
-plot_phases_csv("../scratch/microstrip_s21_phases.csv", 1E6, 1, False)
-plt.xlabel("Frequency (Hz)")
-plt.ylabel("Phase (degrees)")
-plt.legend(["FEM Code", "HFSS"])
-plt.savefig("microstrip_s21_phases.png")
-plt.close()
+# plt.figure()
+# plt.plot(freqs, phases)
+# plot_phases_csv("../scratch/microstrip_s21_phases.csv", 1E6, 1, False)
+# plt.xlabel("Frequency (Hz)")
+# plt.ylabel("Phase (degrees)")
+# plt.legend(["FEM Code", "HFSS"])
+# plt.savefig("microstrip_s21_phases.png")
+# plt.close()
 
 plt.figure()
 plt.plot(freqs, s21s)
-plot_csv("../scratch/microstrip_s21_mag.csv", 1E6, 1, False)
+plt.plot(freqs, np.loadtxt("low_freq_s21s.csv"))
+# plot_csv("../scratch/microstrip_s21_mag.csv", 1E6, 1, False)
 plt.xlabel("Frequency (Hz)")
 plt.ylabel("Mag(S21)")
-plt.legend(["FEM Code", "HFSS"])
-plt.savefig("microstrip_s21_mag.png")
+plt.legend(["Field-Based", "Potential-Based"])
+# plt.legend(["FEM Code", "HFSS"])
+plt.savefig("field_vs_potential_s21.png")
+# plt.savefig("microstrip_s21_mag.png")
 plt.close()
 
 plt.figure()
 plt.plot(freqs, s11s)
-plot_csv("../scratch/microstrip_s11_mag.csv", 1E6, 1, False)
+plt.plot(freqs, np.loadtxt("low_freq_s11s.csv"))
+# plot_csv("../scratch/microstrip_s11_mag.csv", 1E6, 1, False)
 plt.xlabel("Frequency (Hz)")
 plt.ylabel("Mag(S11)")
-plt.legend(["FEM Code", "HFSS"])
-plt.savefig("microstrip_s11_mag.png")
+plt.legend(["Field-Based", "Potential-Based"])
+# plt.legend(["FEM Code", "HFSS"])
+plt.savefig("field_vs_potential_s11.png")
+# plt.savefig("microstrip_s11_mag.png")
 plt.close()
 # plt.plot(k0s, expected_phases)
 plt.savefig("s21_phases_final.png")
