@@ -484,12 +484,13 @@ def is_inside(pt1, pt2, pt3, x, y):
     return True
 
 
-def plot_csv(filename, scale_x=1, skiprows=0, new_fig=True):
+def plot_csv(filename, scale_x=1, skiprows=0, dashed=False, new_fig=True):
     """
     Plot a CSV file using matplotlib.
     :param filename: The name of the file to plot.
     :param scale_x: A factor to scale the x-axis values by. Default = 1 (leave them alone).
     :param skiprows: The number of rows to skip in the file.
+    :param dashed: If ``True``, makes the line on the plot a dashed line instead of a solid line.
     :param new_fig: If ``True``, creates a new figure to plot on. Otherwise just calls plt.plot().
     :return: The figure if one was created.
     """
@@ -498,16 +499,20 @@ def plot_csv(filename, scale_x=1, skiprows=0, new_fig=True):
         fig = plt.figure()
     data = np.loadtxt(filename, skiprows=skiprows, delimiter=',')
     data[:, 0] *= scale_x
-    plt.plot(data[:, 0], data[:, 1])
+    style = "-"
+    if dashed:
+        style = "--"
+    plt.plot(data[:, 0], data[:, 1], style)
     return fig
 
 
-def plot_phases_csv(filename, scale_x=1, skiprows=0, new_fig=True):
+def plot_phases_csv(filename, scale_x=1, skiprows=0, dashed=False, new_fig=True):
     """
     Plot a CSV file using matplotlib.
     :param filename: The name of the file to plot.
     :param scale_x: A factor to scale the x-axis values by. Default = 1 (leave them alone).
     :param skiprows: The number of rows to skip in the file.
+    :param dashed: If ``True``, makes the line on the plot a dashed line instead of a solid line.
     :param new_fig: If ``True``, creates a new figure to plot on. Otherwise just calls plt.plot().
     :return: The figure if one was created.
     """
@@ -520,7 +525,10 @@ def plot_phases_csv(filename, scale_x=1, skiprows=0, new_fig=True):
     for i, value in enumerate(data[:, 1]):
         if value < 0:
             data[i, 1] += 360
-    plt.plot(data[:, 0], data[:, 1])
+    style = "-"
+    if dashed:
+        style = "--"
+    plt.plot(data[:, 0], data[:, 1], style)
     return fig
 
 
