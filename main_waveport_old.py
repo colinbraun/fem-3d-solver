@@ -13,7 +13,7 @@ p1ip, p2ip = np.array([0, 0.0008]), np.array([0, 0])
 p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
 # Generate S21 results for a range of k0 (frequencies)
 num_freqs = 10
-microstrip = True
+microstrip = False
 if microstrip:
     freqs = np.linspace(1E6, 100E6, num_freqs)
     k0s = freqs * 2 * pi / c

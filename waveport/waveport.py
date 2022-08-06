@@ -808,7 +808,12 @@ class Waveguide3D:
         else:
             raise ValueError(f"Field {field} must be one of 'Ex', 'Ey', or 'Ez'.")
         if normalize:
-            E_plot /= np.amax(np.abs(E_plot))
+            min, max = np.amin(E_plot), np.amax(E_plot)
+            if abs(min) > abs(max):
+                E_plot /= min
+            else:
+                E_plot /= max
+            # E_plot /= np.amax(np.abs(E_plot))
         fig = plt.figure()
         plt.title(f"Fields in {plane.upper()}-plane, offset = {round(offset, 3)}")
         if plane.upper() == "YZ":
