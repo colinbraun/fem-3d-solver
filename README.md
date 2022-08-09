@@ -1,5 +1,3 @@
-An initial README file. Will be updated at some point.
-
 # 3D FEM Solver
 
 ## Overview
@@ -7,7 +5,7 @@ This software provides a semi-general-purpose FEM simulator for 3D geometries. I
 
 A lot of the software written is commented. A good majority of the functions/methods have docstring comments, meaning they can generate nice-looking PDFs or webpages of documentation if you feed it into a program like Sphinx. There will be some minor errors/typos and mistakes here or there, so take them with a grain of salt.
 
-# Explanation of Necessary FEM Steps
+# FEM Process Steps
 There are several steps that must be done in order to perform a simulation.
 1. The mesh data from the .inp file must be loaded and manipulated such that the salient data is available to the rest of the program.
 2. A matrix equation must be constructed.
@@ -70,15 +68,90 @@ The most direct results that can be obtained are the field results associated wi
 The S-parameters of a problem with ports is often desirable. The equations/theory for generating this kind of result can be found [NOTE the source and explain].
 
 ### Current Results Generation
-Currently the point-identification-based method described above is used to generate field plots. This is actually vectorized using a method found on stack overflow for identifying if a point lies in a given tetrahedron. If you pursue the route of identifying the tetrahedron each point lies in, you will need something vectorized like this, as the cost of taking a single point, looking through each tetrahedron, and repeating for each point is far too expensive (it is bad enough as it is, but not too bad). The current vectorized appraoch is incredibly memory hungry. You probably will not be able to run it on a computer with 8 GB of RAM with a mesh with more than 12k tetrahedrons. I ran everything on Bell after a certain point, so I did not have a memory problem here (though I only ever tested ~40k tetrahedrons, maybe less). I have gathered that generating plots from 3D simulations is obnoxious, requring a lot of paying attention to details and being difficult to create general-purpose code for. You can see the `Waveguide3D#plot_fields()` method for the implementation.
+Currently, the point-identification-based method described above is used to generate field plots. This is actually vectorized using a method found on stack overflow for identifying if a point lies in a given tetrahedron. If you pursue the route of identifying the tetrahedron each point lies in, you will need something vectorized like this, as the cost of taking a single point, looking through each tetrahedron, and repeating for each point is far too expensive (it is bad enough as it is, but not too bad). The current vectorized appraoch is incredibly memory hungry. You probably will not be able to run it on a computer with 8 GB of RAM with a mesh with more than 12k tetrahedrons. I ran everything on Bell after a certain point, so I did not have a memory problem here (though I only tested ~40k tetrahedrons or so). I have gathered that generating plots from 3D simulations is obnoxious, requring a lot of paying attention to details and being difficult to create general-purpose code for. You can see the `Waveguide3D#plot_fields()` method for the implementation.
 
 There is currently an S-parameter implementation like that described above, though there is some question as to whether or not this is the proper way to do it (it seemed to work fine and make sense).
+
+# Examples
+Below are a couple of examples for how this software works.
+
+## Simple Example
+We look at a simple example for using the software written below:
+```python
+# Import matplotlib
+import matplotlib.pyplot as plt
+
+# Construct the Waveguide3D object. This loads the mesh into the object and initializes variables
+# This particular geometry is oriented along the z-axis (this was chosen when it was created in Cubit)
+waveguide = Waveguide3D.construct_simple("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
+
+# Solve the FEM problem. This constructs the matrix equation and solves it by taking a matrix inverse
+waveguide.solve()
+
+# Determine how long the geometry is along the z-axis. z_max and z_min are attributes of the Waveguide3D object
+z_length = waveguide.z_max - waveguide.z_min
+
+# Produce some field results in the XY plane offset halfway along the geometry. This produces a matplotlib figure.
+# On Bell, the interactive mode of matplotlib does not seem to work (it won't pop up an figure to interact with)
+waveguide.plot_fields(plane="xy", offset=z_length/2, phase=0)
+
+# matplotlib still works without interactive mode, but you will need to save the the results to view them
+plt.savefig("fields_plot.png")
+```
+The resulting image looks like:
+![](C:\Users\User\images\ip_fields.png)
+
+## Advanced Example
+More complicated geometries require specifying more details. By no means is this implementation ideal, but it provides an idea about what kind of details you need to pay attention to. A microstrip line example is shown below:
+
+```python
+# Import matplotlib
+import matplotlib.pyplot as plt
+
+# Construct the Waveguide3D object. This loads the mesh into the object and initializes variables
+# This particular geometry is oriented along the z-axis (this was chosen when it was created in Cubit)
+# The volume names, volume permittivities, and PEC name
+vn, vp, pn = ["TetrahedronsVacuum", "TetrahedronsSubstrate"], [1, 4.5], "PECWalls"
+# The Absorbing Boundary Condition walls name (if it exists)
+abcn = "ABC"
+# The input port surface names, the input port boundary name, and the input port permittivities
+# There are two input port surfaces for the microstrip line. The substrate part and the vacuum/air part.
+ipn, ipbn, ipp = ["InputPortVacuum", "InputPortSubstrate"], "InPortPEC", [1, 4.5]
+# The output port surface names, the output port boundary name, and the output port permittivities
+# There are two output port surfaces for the microstrip line. The substrate part and the vacuum/air part.
+opn, opbn, opp = ["OutputPortVacuum", "OutputPortSubstrate"], "OutPortPEC", [1, 4.5]
+# Integration lines. These are optional, but if included can guarantee the polarity of the fields in a simulation.
+# Not doing this will give correct field results, but the input and output port field profiles used in the
+# S-parameter calculations may be opposite of each other, causing the phase of S21 to be incorrect.
+# This idea is identical to the integration lines you have to choose in HFSS.
+p1ip, p2ip = np.array([0, 0.0008]), np.array([0, 0])
+p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
+# The chosen operating frequency. k0 = 2*pi*f/c to convert to/from frequency.
+k0 = 4
+# Create the Waveguide object with those specifications
+waveguide = Waveguide3D("../cubit_meshes/fixed_pec_mesh.inp", k0, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
+
+# Everything else is now the same as the simple example.
+# Solve the FEM problem. This constructs the matrix equation and solves it by taking a matrix inverse
+waveguide.solve()
+
+# Determine how long the geometry is along the z-axis. z_max and z_min are attributes of the Waveguide3D object
+z_length = waveguide.z_max - waveguide.z_min
+
+# Produce some field results in the XY plane offset halfway along the geometry. This produces a matplotlib figure.
+# On Bell, the interactive mode of matplotlib does not seem to work (it won't pop up an figure to interact with)
+waveguide.plot_fields(plane="xy", offset=z_length/2, phase=0)
+
+# matplotlib still works without interactive mode, but you will need to save the the results to view them
+plt.savefig("fields_plot.png")
+```
+The resulting image looks like:
+![](dispersion.png)
 
 # Useful Resources
 There are a few resources that were very helpful in the construction of this software. I have listed them here.
 
-1. Jin's Book (this one is obvious)
+1. Jin's Book (general FEM principles and basic problem formulations)
 2. NASA FEM Paper (an easy-to-understand read and has equations for the interpolating functions and some integrals)
 3. Comsol Equations for S-Parameters
 4. Jin's other Book when I was first understanding the S-parameters
-
