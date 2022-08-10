@@ -83,7 +83,7 @@ import matplotlib.pyplot as plt
 
 # Construct the Waveguide3D object. This loads the mesh into the object and initializes variables
 # This particular geometry is oriented along the z-axis (this was chosen when it was created in Cubit)
-waveguide = Waveguide3D.construct_simple("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
+waveguide = Waveguide3D.construct_simple("meshes/rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
 
 # Solve the FEM problem. This constructs the matrix equation and solves it by taking a matrix inverse
 waveguide.solve()
@@ -99,7 +99,7 @@ waveguide.plot_fields(plane="xy", offset=z_length/2, phase=0)
 plt.savefig("fields_plot.png")
 ```
 The resulting image looks like:
-![](C:\Users\User\images\ip_fields.png)
+![](dispersion.png)
 
 ## Advanced Example
 More complicated geometries require specifying more details. By no means is this implementation ideal, but it provides an idea about what kind of details you need to pay attention to. A microstrip line example is shown below:

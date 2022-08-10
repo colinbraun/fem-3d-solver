@@ -159,12 +159,10 @@ class Waveguide3D:
                     Czk = a_ik[2] * a_jk[3] - a_ik[3] * a_jk[2]
                     # If working with input port edges, need to do different integral
                     if edgei in self.boundary_input_edge_numbers and edgej in self.boundary_input_edge_numbers:
-                        # TODO: Implement this integral and logic
                         # Perform the (n_hat x N_i) \dot (n_hat x N_j) integral
                         # For n_hat = z_hat, this turns out to be the same as N_i \dot N_j, so integral is same as inhomo wg
-                        # Need all 3 nodes first
-                        # Necessary constants from NASA paper eqs. 68-72.
-                        # Need the third point that makes up the face of the input port
+
+                        # Need the third point that makes up the face of the input port (first 2 are in the edge)
                         found_edge_no = -1
                         # Search for a different edge on the input port from this tetrahedral element
                         for edge in tet.edges:
@@ -201,11 +199,9 @@ class Waveguide3D:
                             N_j[:, 2] = Azk + Bzk * sample_points[:, 0] + Czk * sample_points[:, 1]
                             N_j = N_j * edge2.length / 36 / tet.volume**2
                             n_hat_x_nj = np.array([np.cross(n_hat, vec) for vec in N_j])
-                            # TODO: Use the above properly (not being used at all right now for some reason)
                             dotted = n_hat_x_ni[:, 0] * n_hat_x_nj[:, 0] + n_hat_x_ni[:, 1] * n_hat_x_nj[:, 1] + n_hat_x_ni[:, 2] * n_hat_x_nj[:, 2]
                             ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
                             dotted = np.reshape(dotted, [len(dotted), 1])
-                            # ni_dot_nj = N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2]
                             integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
                             self.K[self.remap_edge_nums[edgei], self.remap_edge_nums[edgej]] += integral * self.input_port.get_selected_beta() * 1j
 
@@ -213,9 +209,8 @@ class Waveguide3D:
                     elif edgei in self.boundary_output_edge_numbers and edgej in self.boundary_output_edge_numbers:
                         # Perform the (n_hat x N_i) \dot (n_hat x N_j) integral
                         # For n_hat = z_hat, this turns out to be the same as N_i \dot N_j, so integral is same as inhomo wg
-                        # Need all 3 nodes first
-                        # Necessary constants from NASA paper eqs. 68-72.
-                        # Need the third point that makes up the face of the input port
+
+                        # Need the third point that makes up the face of the input port (first 2 are in the edge)
                         found_edge_no = -1
                         # Search for a different edge on the input port from this tetrahedral element
                         for edge in tet.edges:
@@ -254,16 +249,14 @@ class Waveguide3D:
                             n_hat_x_nj = np.array([np.cross(n_hat, vec) for vec in N_j])
                             dotted = n_hat_x_ni[:, 0] * n_hat_x_nj[:, 0] + n_hat_x_ni[:, 1] * n_hat_x_nj[:, 1] + n_hat_x_ni[:, 2] * n_hat_x_nj[:, 2]
                             dotted = np.reshape(dotted, [len(dotted), 1])
-                            # ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
                             integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
                             self.K[self.remap_edge_nums[edgei], self.remap_edge_nums[edgej]] += self.output_port.get_selected_beta() * integral * 1j
 
                     elif edgei in self.abc_edge_numbers and edgej in self.abc_edge_numbers:
                         # Perform the (n_hat x N_i) \dot (n_hat x N_j) integral
                         # For n_hat = z_hat, this turns out to be the same as N_i \dot N_j, so integral is same as inhomo wg
-                        # Need all 3 nodes first
-                        # Necessary constants from NASA paper eqs. 68-72.
-                        # Need the third point that makes up the face of the input port
+
+                        # Need the third point that makes up the face of the input port (first 2 are in the edge)
                         found_edge_no = -1
                         # Search for a different edge on the input port from this tetrahedral element
                         for edge in tet.edges:
@@ -302,13 +295,10 @@ class Waveguide3D:
                             n_hat_x_nj = np.array([np.cross(n_hat, vec) for vec in N_j])
                             dotted = n_hat_x_ni[:, 0] * n_hat_x_nj[:, 0] + n_hat_x_ni[:, 1] * n_hat_x_nj[:, 1] + n_hat_x_ni[:, 2] * n_hat_x_nj[:, 2]
                             dotted = np.reshape(dotted, [len(dotted), 1])
-                            # ni_dot_nj = np.reshape(N_i[:, 0] * N_j[:, 0] + N_i[:, 1] * N_j[:, 1] + N_i[:, 2] * N_j[:, 2], [len(sample_points), 1])
                             integral = quad_eval(nodes[0], nodes[1], nodes[2], dotted)
                             self.K[self.remap_edge_nums[edgei], self.remap_edge_nums[edgej]] += 2 * pi * self.f / sqrt(epsilon_0 * mu_0) * integral * 1j
                             continue
-                    # Otherwise we are working with an inner edge (not on boundary). Do necessary integral.
-                    # Currently removing this else unless it is found that it is needed
-                    # else:
+
                     # Compute the curl(N_i) \dot curl(N_j) part of K_ij
                     curl_dot_curl_part = edge1.length*edge2.length / 324 / tet.volume**3 * (Czl*Czk + Cxl*Cxk + Byl*Byk)
 
@@ -343,7 +333,7 @@ class Waveguide3D:
 
     def compute_s11(self):
         """
-        Integrate the input port, generating the S11 value.
+        Integrate the input port, generating the S11 value. The integrals follow the Comsol webpage
         :return: The evaluated S-parameter.
         """
         mode = 0
@@ -550,9 +540,8 @@ class Waveguide3D:
 
     def integrate_port_profile(self, port, mode=0):
         """
-        Integrate the electric field profile of port mode index ``mode`` on port ``port``. The surface integral is
-        evaluated by generating the excitation vector (see generate_b_vector()) and then integrating E dot E_conjugate
-        using the b_vector as the interpolating function.
+        Integrate the field profile of port mode index ``mode`` on port ``port``. This is done by integrating the
+        incident field profile using quadrature.
         :param port: A iwaveguide.Waveguide object corresponding to the port to integrate.
         :param mode: The mode of the profile to integrate. Default = 0 (lowest cut-off frequency mode). W.I.P.
         :return: The result as a complex number (in most cases the imaginary part will be 0).
@@ -602,78 +591,6 @@ class Waveguide3D:
             integral += quad_eval(nodes[0], nodes[1], nodes[2], values)
         return integral
 
-    def calculate_port_profile_power(self, port, mode, custom_coefficients=None):
-        """
-        Calculate the power of the excited port. This is computed by computing the transverse magnetic field,
-        calculating the poynting vector (S = E X H), and integrating the normal component of it.
-        :param port: The port to compute the power at.
-        :param mode: The mode of the profile to calculate the fields from.
-        :param custom_coefficients: A custom set of edge coefficients to use. If this is passed, mode is ignored and the
-        electric field is calculated using these edge coefficients instead. Default is None.
-        :return: The magnitude of the calculated power going through the port.
-        """
-        if port is self.input_port:
-            boundary_tets = self.boundary_input_tets
-            boundary_edge_numbers = self.boundary_input_edge_numbers
-            # TODO: No longer assume n_hat = z_hat
-        elif port is self.output_port:
-            boundary_tets = self.boundary_output_tets
-            boundary_edge_numbers = self.boundary_output_edge_numbers
-            # TODO: No longer assume n_hat = z_hat
-        else:
-            raise ValueError("'port' parameter did not match the input or output port.")
-        power = 0
-        if custom_coefficients is None:
-            b = self.generate_b_vector(port, mode)
-        else:
-            b = custom_coefficients
-        n_hat = np.array([0, 0, 1])
-        beta = port.get_selected_beta()
-        # Iterate over the input port boundary tetrahedrons to calculate the integral
-        for tet in boundary_tets:
-            # Want to collect 2 edges that lie on the surface to find the 3 nodes that make it up
-            found_edge_nos = []
-            for edge in tet.edges:
-                if edge in boundary_edge_numbers:
-                    # We found an edge containing the third node, note it
-                    found_edge_nos.append(edge)
-                # Once 2 edges have been found, stop searching
-                if len(found_edge_nos) == 2:
-                    break
-            # This should always be True, but check just in case.
-            if len(found_edge_nos) == 2:
-                found_edge1 = self.all_edges[found_edge_nos[0]]
-                found_edge2 = self.all_edges[found_edge_nos[1]]
-                # Get the 3 nodes that make up the triangle on the surface
-                nodes = np.unique(np.array([self.all_nodes[found_edge1.node1], self.all_nodes[found_edge1.node2],
-                                            self.all_nodes[found_edge2.node1], self.all_nodes[found_edge2.node2]]),
-                                  axis=0)
-                # Ensure 3 were found
-                if len(nodes) != 3:
-                    raise RuntimeError("Did not find 3 nodes on surface triangle")
-                # -------------Perform quadrature on the 3 nodes that make up the triangle on the surface-----------
-                # Generate the points to sample at for the quadrature
-                sample_points = quad_sample_points(3, nodes[0], nodes[1], nodes[2])
-                # Get the edge coefficients for the port field profile
-                phis = [b[self.remap_edge_nums[edge_no]] if edge_no in self.remap_edge_nums else 0 for edge_no in tet.edges]
-                # Interpolate the incident field at the input port (if no reflection, should be similar to the solution vector results)
-                Ep = np.array([tet.interpolate(phis, sample_point) for sample_point in sample_points])
-                # Ep = Ep / sqrt(7.87771167E-19)
-                # z_te = \omega * \mu / \beta
-                z_te = self.k0 * c * mu_0 / beta
-                Hp = np.array([np.cross(n_hat, Ep[i]) for i in range(len(Ep))]) / z_te
-                # Compute the dot product at each point
-                # values = np.reshape(Ep[:, 0] * Ep_conj[:, 0] + Ep[:, 1] * Ep_conj[:, 1] + Ep[:, 2] * Ep_conj[:, 2],
-                #                     [len(sample_points), 1])
-                values = np.reshape(np.array([np.cross(Ep[i], Hp[i]) for i in range(len(Ep))])[:, 2], [len(sample_points), 1])
-                # Compute the integral in the denominator using quadrature
-                power += quad_eval(nodes[0], nodes[1], nodes[2], values)
-            else:
-                raise RuntimeError("Did not find boundary face of boundary tetrahedron")
-        # if power[0].imag != 0:
-        #     raise RuntimeError(f"Calculated power {power[0]} contained imaginary component but expected it to be purely real.")
-        return abs(power)
-
     def get_fields_in_plane(self, num_axis1_points=100, num_axis2_points=100, plane="xy", offset=0.1):
         """
         Compute the fields in the specified plane.
@@ -681,10 +598,9 @@ class Waveguide3D:
         :param num_axis2_points: The number of y points to compute the fields for along the second axis in the plane.
         :param plane: One of {"xy", "xz", "yz"} to select which plane to take a cut of.
         :param offset: The offset from the edge of the geometry in the direction perpendicular to the plane to calc at.
-        :return: Ex, Ey, and Ez, indexed by [z, y, x]. (One of these indices will only allow for the value 0).
+        :return: Ex, Ey, and Ez, indexed by [z, y, x]. (One of these indices will only allow for the index 0).
         """
         print("Calculating field data")
-        # Compute the bounds of the waveguide
         # Create a cuboid grid of points that the geometry is inscribed in
         x_points = [self.x_min+offset] if plane.upper() == "YZ" else np.linspace(self.x_min, self.x_max, num_axis1_points)
         y_points = [self.y_min+offset] if plane.upper() == "XZ" else np.linspace(self.y_min, self.y_max, num_axis1_points if plane.upper() == "YZ" else num_axis2_points)
@@ -704,7 +620,7 @@ class Waveguide3D:
                     pt_x = x_points[k]
                     field_points[k + j*num_x_points + i*num_x_points*num_y_points] = np.array([pt_x, pt_y, pt_z])
 
-        # Find which tetrahedron each point lies in
+        # Find which tetrahedron each point lies in. This is vectorized.
         tet_indices = where(self.all_nodes, self.tets_node_ids, field_points)
 
         # Compute the field at each of the points
@@ -735,6 +651,7 @@ class Waveguide3D:
         :param plane: One of {"xy", "xz", "yz"} to select which plane to take a cut of.
         :param offset: The offset from the edge of the geometry in the direction perpendicular to the plane to calc at.
         :param phase: The phase in radians to calculate the fields at.
+        :param vmin: The minimum value of the
         :param use_cached_fields: If ``True``, do not recompute the fields, just apply the phase and plot the result.
         :param normalize: If ``True``, normalize the maximum field values to 1. Note this causes a loss in the meaning
         of the relative magnitudes of Ex, Ey, Ez, since they are each separately normalized.
