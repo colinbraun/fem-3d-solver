@@ -1,5 +1,25 @@
 # 3D FEM Solver
-
+Table of Contents
+=================
+* [3D FEM Solver](#3d-fem-solver)
+   * [Overview](#overview)
+   * [FEM Process Steps](#fem-process-steps)
+      * [Mesh Loading and Data Structuring Using Coreform Cubit](#mesh-loading-and-data-structuring-using-coreform-cubit)
+         * [Current Mesh Loading and Data Structuring Implementation](#current-mesh-loading-and-data-structuring-implementation)
+      * [Matrix of Equations Construction](#matrix-of-equations-construction)
+         * [Current Matrix of Equations Construction](#current-matrix-of-equations-construction)
+      * [Solving the Equation Matrix](#solving-the-equation-matrix)
+         * [Current Solving of the Equation Matrix](#current-solving-of-the-equation-matrix)
+      * [Generating Meaningful Results](#generating-meaningful-results)
+         * [Calculating Fields](#calculating-fields)
+         * [Calculating S-Parameters](#calculating-s-parameters)
+         * [Current Results Generation](#current-results-generation)
+            * [Current Field Calculations](#current-field-calculations)
+            * [Current S-parameter Calculations](#current-s-parameter-calculations)
+   * [Examples](#examples)
+      * [Simple Example](#simple-example)
+      * [Advanced Example](#advanced-example)
+   * [Useful Resources](#useful-resources)
 ## Overview
 This software provides a semi-general-purpose FEM simulator for 3D geometries. It takes a .inp file (usually generated in Coreform Cubit) and performs a simulation on it. The code is currently set up to have 1 input port and 1 output port.
 
@@ -86,7 +106,7 @@ Currently, the point-identification-based method described above is used to gene
 ##### Current S-parameter Calculations
 There is currently an S-parameter implementation like that described above, though there is some question as to whether or not this is the proper way to do it (it seemed to work fine and make sense, but should be scrutinized). The `Waveguide3D#compute_s21()` method in waveport/waveport.py performs this calculation.
 
-# Examples
+## Examples
 Below are a couple of examples for how this software works.
 
 ### Simple Example
