@@ -12,7 +12,7 @@ opn, opbn, opp = ["OutputPortVacuum", "OutputPortSubstrate"], "OutPortPEC", [1, 
 p1ip, p2ip = np.array([0, 0.0008]), np.array([0, 0])
 p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
 # waveguide = Waveguide3DLFBD.construct_simple("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
-waveguide = Waveguide3D("../cubit_meshes/fixed_pec_mesh.inp", 2.095845, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
+waveguide = Waveguide3D("meshes/microstrip_line_44000tets_pec_walls_example.inp", 2.095845, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
 waveguide.solve()
 z_length = waveguide.z_max - waveguide.z_min
 y_length = waveguide.y_max - waveguide.y_min

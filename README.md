@@ -67,7 +67,7 @@ The most direct results that can be obtained are the field results associated wi
 
 The S-parameters of a problem with ports is often desirable. The equations/theory for generating this kind of result can be found on [Comsol's page](https://doc.comsol.com/5.5/doc/com.comsol.help.woptics/woptics_ug_modeling.5.24.html). The equation
 
-![s21_params](readme_refs/s21_equation.png)
+![s21_equation](readme_refs/s21_equation.png)
 
 allows for the straightforward computation of the S<sub>21</sub> parameter. It is my understanding that the numerator qunatities E<sub>c</sub> and E<sub>2</sub> are the field measured by the tetrahedron interpolating functions and the field profile at the output port of the mode of interest respectively (as though it were an incident field). The denominator quantity E<sub>2</sub> is the incident field of the input port. 
 
@@ -91,23 +91,24 @@ from waveport.waveport import Waveguide3D
 
 # Construct the Waveguide3D object. This loads the mesh into the object and initializes variables
 # This particular geometry is oriented along the z-axis (this was chosen when it was created in Cubit)
-waveguide = Waveguide3D.construct_simple("meshes/rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
+waveguide = Waveguide3D.construct_simple("meshes/rectangular_waveguide_12000tets_example.inp", 4)
 
 # Solve the FEM problem. This constructs the matrix equation and solves it by taking a matrix inverse
 waveguide.solve()
 
 # Determine how long the geometry is along the z-axis. z_max and z_min are attributes of the Waveguide3D object
-z_length = waveguide.z_max - waveguide.z_min
+y_length = waveguide.y_max - waveguide.y_min
 
 # Produce some field results in the XY plane offset halfway along the geometry. This produces a matplotlib figure.
 # On Bell, the interactive mode of matplotlib does not seem to work (it won't pop up an figure to interact with)
-waveguide.plot_fields(plane="xy", offset=z_length/2, phase=0)
+waveguide.plot_fields(plane="xz", offset=y_length/2, phase=0)
 
 # matplotlib still works without interactive mode, but you will need to save the the results to view them
-plt.savefig("fields_plot.png")
+plt.savefig("fields_plot_simple.png")
 ```
 The resulting image looks like:
-![](dispersion.png)
+
+![fields_plot_simple](readme_refs/fields_plot_simple.png)
 
 ### Advanced Example
 More complicated geometries require specifying more details. By no means is this implementation ideal, but it provides an idea about what kind of details you need to pay attention to. A microstrip line example is shown below:
@@ -141,7 +142,7 @@ p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
 # The chosen operating frequency. k0 = 2*pi*f/c to convert to/from frequency.
 k0 = 4
 # Create the Waveguide object with those specifications
-waveguide = Waveguide3D("../cubit_meshes/fixed_pec_mesh.inp", k0, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
+waveguide = Waveguide3D("meshes/microstrip_line_44000tets_pec_walls_example.inp", k0, vn, vp, pn, abcn, ipn, ipbn, ipp, opn, opbn, opp, p1ip, p2ip, p1op, p2op)
 
 # Everything else is now the same as the simple example.
 # Solve the FEM problem. This constructs the matrix equation and solves it by taking a matrix inverse
@@ -155,10 +156,11 @@ z_length = waveguide.z_max - waveguide.z_min
 waveguide.plot_fields(plane="xy", offset=z_length/2, phase=0)
 
 # matplotlib still works without interactive mode, but you will need to save the the results to view them
-plt.savefig("fields_plot.png")
+plt.savefig("fields_plot_advanced.png")
 ```
 The resulting image looks like:
-![](dispersion.png)
+
+![fields_plot_advanced](readme_refs/fields_plot_advanced.png)
 
 ## Useful Resources
 There are a few resources that were very helpful in the construction of this software. I have listed them here.
