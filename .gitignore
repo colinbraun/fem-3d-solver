@@ -3,4 +3,4 @@ venv/
 .idea/workspace.xml
 iwaveguide/
 images/
-*.png
+./*.png

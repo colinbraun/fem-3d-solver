@@ -42,7 +42,8 @@ for i, k0 in enumerate(k0s):
             waveguide.output_port.set_mode_index(index)
         waveguide.solve(index)
     else:
-        waveguide = Waveguide3D.construct_simple("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", k0)
+        waveguide = Waveguide3D.construct_simple(
+            "meshes/rectangular_waveguide_12000tets_correct_orientation_20220630.inp", k0)
         waveguide.solve()
     lam = 2 * pi / waveguide.input_port.get_selected_beta()
     z_length = waveguide.z_max - waveguide.z_min
@@ -133,7 +134,7 @@ else:
 # plt.close()
 # The most common test so far:
 # waveguide = Waveguide3D("rectangular_waveguide_finer_20220625.inp", 4)
-waveguide = Waveguide3D.construct_simple("rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
+waveguide = Waveguide3D.construct_simple("meshes/rectangular_waveguide_12000tets_correct_orientation_20220630.inp", 4)
 waveguide.solve()
 # waveguide = Waveguide3D("rectangular_waveguide_12000tets_correct_orientation_rotated_20220705.inp", 8)
 # Create the microstrip-line simulated at f = 1 MHz
