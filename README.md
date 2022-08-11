@@ -5,7 +5,7 @@ This software provides a semi-general-purpose FEM simulator for 3D geometries. I
 
 A lot of the software written is commented. A good majority of the functions/methods have docstring comments, meaning they can generate nice-looking PDFs or webpages of documentation if you feed it into a program like Sphinx. There will be some minor errors/typos and mistakes here or there, so take them with a grain of salt.
 
-# FEM Process Steps
+## FEM Process Steps
 There are several steps that must be done in order to perform a simulation.
 1. The mesh data from the .inp file must be loaded and manipulated such that the salient data is available to the rest of the program.
 2. A matrix equation must be constructed.
@@ -14,8 +14,8 @@ There are several steps that must be done in order to perform a simulation.
 
 Each of these sections will be addressed next.
 
-## Mesh Loading and Data Structuring
-To understand this section best, you should probably have a .inp file to look at as an example, as well as Coreform Cubit pulled up. It is assumed we are working with tetrahedrons.
+### Mesh Loading and Data Structuring
+To understand this section best, you should probably have a .inp file to look at as an example, as well as Cubit pulled up. It is assumed we are working with tetrahedrons.
 
 For a 3D mesh of tetrahedrons created in Cubit and exported to a .inp file, Cubit will create a section in the file containing the locations of each node, assigning each a unique number to identify them (essentially a global node number). This section is labeled "ALLNODES" in the .inp file (not sure if you can change this or not). This section will looks something like this in the .ipn file:
 
@@ -47,39 +47,47 @@ These are just the first 5 entries of the Block. Each entry describes the 4 node
 
 Similarly, if we created a Block containing information about a surface, each entry would contain 3 global node numbers that make up a triangle on the surface.
 
-### Current Mesh Loading and Data Structuring Implementation
+#### Current Mesh Loading and Data Structuring Implementation
 All of the mesh loading and data structuring is done in util.py. A function called `load_mesh_block()` will take a string containing the name of the Block and return a 2D array containing the data. A function called `load_mesh() is created with the intention of loading everything needed, and it makes use of the load_mesh_block() function. It accepts a bunch of names for the various necessary blocks in running a simulation (i.e. names for input/output surfaces, pec walls, curves bounding the input/output surfaces, etc.). An example of its usage can be seen in waveport/waveport.py in the Waveguide3D constructor (__init__() function). An instance of this is created as an example in main_waveport.py.
 
-## Matrix of Equations Construction
+### Matrix of Equations Construction
 After all of the necessary data is loaded and structured, the matrix equation can be solved.
 
-### Current Matrix of Equations Construction
+#### Current Matrix of Equations Construction
 This is done with the `Waveguide3D#solve()` method in waveport/waveport.py. It is a bit messy, and should probably be done differently for both organizational and efficiency reasons. Currently, each tetrahedron is iterated over. For each tetrahedron, the interactions of each of the edges that need to be integrated is done by placing 2 more for loops, one nested in the other and each over all of the edges of the tetrahedron. The integrations are performed, with the indices into the matrix equation being determined by the global edge numbers of the edges being iterated over. PEC edges are ignored, being skipped when they are come across in the edge for loops. Special care is taken with edges on surfaces such as the input/output port or ABC walls if there are any.
 
-## Solving the Equation Matrix
+### Solving the Equation Matrix
 The equation matrix can be solved naively by taking an inverse, but iterative methods can be employed if desired. The result of solving this matrix is obviously the desired edge coefficients in the interpolating functions.
 
-### Current Solving of the Equation Matrix
+#### Current Solving of the Equation Matrix
 Currently, the equation matrix is solved by taking an inverse, which is rather expensive.
 
-## Generating Meaningful Results
+### Generating Meaningful Results
 The most direct results that can be obtained are the field results associated with the interpolating functions. In order to calculate the field at a given point, we must know the edges that contribute to the field there. This can be done by finding which tetrahedron the point lies in, calculating the field contributed by each edge of that tetrahedron, and summing them together. With the ability to compute the field at any desired point, field plots can be generated.
 
-The S-parameters of a problem with ports is often desirable. The equations/theory for generating this kind of result can be found [NOTE the source and explain].
+The S-parameters of a problem with ports is often desirable. The equations/theory for generating this kind of result can be found on [Comsol's page](https://doc.comsol.com/5.5/doc/com.comsol.help.woptics/woptics_ug_modeling.5.24.html). The equation
 
-### Current Results Generation
+![s21_params](readme_refs/s21_equation.png)
+
+allows for the straightforward computation of the S<sub>21</sub> parameter. It is my understanding that the numerator qunatities E<sub>c</sub> and E<sub>2</sub> are the field measured by the tetrahedron interpolating functions and the field profile at the output port of the mode of interest respectively (as though it were an incident field). The denominator quantity E<sub>2</sub> is the incident field of the input port. 
+
+#### Current Results Generation
+The current implementation allows for computation and plotting of fields and calculation of basic S-parameters.
+##### Current Field Calculations
 Currently, the point-identification-based method described above is used to generate field plots. This is actually vectorized using a method found on stack overflow for identifying if a point lies in a given tetrahedron. If you pursue the route of identifying the tetrahedron each point lies in, you will need something vectorized like this, as the cost of taking a single point, looking through each tetrahedron, and repeating for each point is far too expensive (it is bad enough as it is, but not too bad). The current vectorized appraoch is incredibly memory hungry. You probably will not be able to run it on a computer with 8 GB of RAM with a mesh with more than 12k tetrahedrons. I ran everything on Bell after a certain point, so I did not have a memory problem here (though I only tested ~40k tetrahedrons or so). I have gathered that generating plots from 3D simulations is obnoxious, requring a lot of paying attention to details and being difficult to create general-purpose code for. You can see the `Waveguide3D#plot_fields()` method for the implementation.
-
-There is currently an S-parameter implementation like that described above, though there is some question as to whether or not this is the proper way to do it (it seemed to work fine and make sense).
+##### Current S-parameter Calculations
+There is currently an S-parameter implementation like that described above, though there is some question as to whether or not this is the proper way to do it (it seemed to work fine and make sense, but should be scrutinized). The `Waveguide3D#compute_s21()` method in waveport/waveport.py performs this calculation.
 
 # Examples
 Below are a couple of examples for how this software works.
 
-## Simple Example
+### Simple Example
 We look at a simple example for using the software written below:
 ```python
 # Import matplotlib
 import matplotlib.pyplot as plt
+# Import Waveguide3D
+from waveport.waveport import Waveguide3D
 
 # Construct the Waveguide3D object. This loads the mesh into the object and initializes variables
 # This particular geometry is oriented along the z-axis (this was chosen when it was created in Cubit)
@@ -101,12 +109,16 @@ plt.savefig("fields_plot.png")
 The resulting image looks like:
 ![](dispersion.png)
 
-## Advanced Example
+### Advanced Example
 More complicated geometries require specifying more details. By no means is this implementation ideal, but it provides an idea about what kind of details you need to pay attention to. A microstrip line example is shown below:
 
 ```python
 # Import matplotlib
 import matplotlib.pyplot as plt
+# Import numpy
+import numpy as np
+# Import Waveguide3D
+from waveport.waveport import Waveguide3D
 
 # Construct the Waveguide3D object. This loads the mesh into the object and initializes variables
 # This particular geometry is oriented along the z-axis (this was chosen when it was created in Cubit)
@@ -148,10 +160,10 @@ plt.savefig("fields_plot.png")
 The resulting image looks like:
 ![](dispersion.png)
 
-# Useful Resources
+## Useful Resources
 There are a few resources that were very helpful in the construction of this software. I have listed them here.
 
-1. Jin's Book (general FEM principles and basic problem formulations)
-2. NASA FEM Paper (an easy-to-understand read and has equations for the interpolating functions and some integrals)
-3. Comsol Equations for S-Parameters
-4. Jin's other Book when I was first understanding the S-parameters
+1. Jin's Book (Theory and Computation of Electromagnetic Fields) - General FEM principles and basic problem formulations
+2. [NASA FEM Paper](readme_refs/nasa_fem_paper.pdf) - An easy-to-understand read and has equations for the interpolating functions and some integrals. Good supplement to Jin's book.
+3. [Comsol Equations](https://doc.comsol.com/5.5/doc/com.comsol.help.woptics/woptics_ug_modeling.5.24.html) - Helpful for understanding S-parameter calculations (the S-parameter section above is a good supplement)
+4. Jin's other Book - Used this when making sense of S-parameter calculations
