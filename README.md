@@ -7,17 +7,21 @@ A lot of the software written is commented. A good majority of the functions/met
 
 ## FEM Process Steps
 There are several steps that must be done in order to perform a simulation.
-1. The mesh data from the .inp file must be loaded and manipulated such that the salient data is available to the rest of the program.
+1. The mesh data from a .inp file must be loaded and manipulated such that the salient data is available to the rest of the program.
 2. A matrix equation must be constructed.
 3. The matrix equation must be solved.
 4. Meaningful results must be generated.
 
 Each of these sections will be addressed next.
 
-### Mesh Loading and Data Structuring
-To understand this section best, you should probably have a .inp file to look at as an example, as well as Cubit pulled up. It is assumed we are working with tetrahedrons.
+### Mesh Loading and Data Structuring Using Coreform Cubit
+To understand this section best, you should probably have a .inp file (see the [example](meshes/rectangular_waveguide_12000tets_example.inp) .inp file) to look at for reference, as well as Cubit pulled up. It is assumed we are working with tetrahedrons.
 
-For a 3D mesh of tetrahedrons created in Cubit and exported to a .inp file, Cubit will create a section in the file containing the locations of each node, assigning each a unique number to identify them (essentially a global node number). This section is labeled "ALLNODES" in the .inp file (not sure if you can change this or not). This section will looks something like this in the .ipn file:
+Consider a rectangular waveguide mesh in cubit, as shown below:
+
+![cubit_example_mesh](readme_refs/cubit_example_mesh.png)
+
+When you create a 3D mesh of tetrahedrons in Cubit and export it as a .inp file, Cubit will create a section in the file containing the locations of each node, assigning each a unique number to identify them (essentially a global node number). This section is labeled "ALLNODES" in the .inp file (not sure if you can change this or not). This section will look something like this in the .inp file:
 
 ```
 ********************************** N O D E S **********************************
@@ -31,7 +35,9 @@ For a 3D mesh of tetrahedrons created in Cubit and exported to a .inp file, Cubi
 
 One can have Cubit provide more information about the mesh than this by creating what Cubit calls "Blocks". You can see this in the GUI. These Blocks contain information about which node numbers (call them global node numbers if you prefer) make up a particular surface, volume, curve/edge, etc. This information is given in the .inp always in terms of global node numbers.
 
-Suppose we are working with a cuboid as our volume (perhaps it is a rectangular waveguide). We would create a Block for the cuboid volume in Cubit. When we export the .inp file, we will see the following kind of information:
+![cubit_create_block_example](readme_refs/cubit_create_block_example.png)
+
+Suppose we are working with the rectangular waveguide mesh above. We would create a Block for the volume in Cubit. When we export the .inp file, we will see the following information:
 
 ```
 ********************************** E L E M E N T S ****************************
@@ -43,18 +49,18 @@ Suppose we are working with a cuboid as our volume (perhaps it is a rectangular 
        5,     832,     833,     834,     835
 ```
 
-These are just the first 5 entries of the Block. Each entry describes the 4 nodes of a tetrahedron that makes up part of the voluem. Notice they contain the global node number from the ALLNODES set earlier. It is also worth nothing that Blocks can be named. This one is named "Tetrahedrons", as visible above. This was a choice, and not automatic. The default names for blocks are usually things like "EB1", "EB2", and so on. It is just a convenience to name them something meaningful.
+These are just the first 5 entries of the Block. Each entry describes the 4 nodes of a tetrahedron that makes up part of the voluem. Notice they contain the global node number from the ALLNODES set earlier. It is also worth nothing that Blocks can be named. This one is named "Tetrahedrons", as visible above. This was a choice, not the default. The default names for blocks are usually things like "EB1", "EB2", and so on. It is just a convenience to name them something meaningful.
 
 Similarly, if we created a Block containing information about a surface, each entry would contain 3 global node numbers that make up a triangle on the surface.
 
 #### Current Mesh Loading and Data Structuring Implementation
-All of the mesh loading and data structuring is done in util.py. A function called `load_mesh_block()` will take a string containing the name of the Block and return a 2D array containing the data. A function called `load_mesh() is created with the intention of loading everything needed, and it makes use of the load_mesh_block() function. It accepts a bunch of names for the various necessary blocks in running a simulation (i.e. names for input/output surfaces, pec walls, curves bounding the input/output surfaces, etc.). An example of its usage can be seen in waveport/waveport.py in the Waveguide3D constructor (__init__() function). An instance of this is created as an example in main_waveport.py.
+All of the mesh loading and data structuring is done in util.py. A function called `load_mesh_block()` will take a string containing the name of the Block and return a 2D array containing the data. A function called `load_mesh()` is created with the intention of loading everything needed, and it makes use of the load_mesh_block() function. It accepts a bunch of names for the various necessary blocks in running a simulation (i.e. names for input/output surfaces, pec walls, curves bounding the input/output surfaces, etc.). An example of its usage can be seen in waveport/waveport.py in the Waveguide3D constructor (see `Waveguide3D#__init__()`). See the [examples](#examples) section for how it is used.
 
 ### Matrix of Equations Construction
-After all of the necessary data is loaded and structured, the matrix equation can be solved.
+After all of the necessary data is loaded and structured, the matrix equation can be constructed. The details of doing this are the bulk of the work in creating a functional FEM solver, and Jin's book mentioned in the [Useful Resources](#useful-resources) section is the most helpful reference for coming up with these.
 
 #### Current Matrix of Equations Construction
-This is done with the `Waveguide3D#solve()` method in waveport/waveport.py. It is a bit messy, and should probably be done differently for both organizational and efficiency reasons. Currently, each tetrahedron is iterated over. For each tetrahedron, the interactions of each of the edges that need to be integrated is done by placing 2 more for loops, one nested in the other and each over all of the edges of the tetrahedron. The integrations are performed, with the indices into the matrix equation being determined by the global edge numbers of the edges being iterated over. PEC edges are ignored, being skipped when they are come across in the edge for loops. Special care is taken with edges on surfaces such as the input/output port or ABC walls if there are any.
+This is done with the `Waveguide3D#solve()` method in waveport/waveport.py. It is a bit messy, and should probably be done differently for both organizational and efficiency reasons. Currently, each tetrahedron is iterated over. For each tetrahedron, the interactions of each of the edges that need to be integrated is done by adding 2 more for loops, one nested in the other and each over all of the edges of the tetrahedron. The integrations are performed, with the indices into the matrix equation being determined by the global edge numbers of the edges being iterated over. PEC edges are ignored, being skipped when they are come across in the edge for loops. Special care is taken with edges on surfaces such as the input/output port or ABC walls if there are any.
 
 ### Solving the Equation Matrix
 The equation matrix can be solved naively by taking an inverse, but iterative methods can be employed if desired. The result of solving this matrix is obviously the desired edge coefficients in the interpolating functions.
@@ -63,8 +69,10 @@ The equation matrix can be solved naively by taking an inverse, but iterative me
 Currently, the equation matrix is solved by taking an inverse, which is rather expensive.
 
 ### Generating Meaningful Results
-The most direct results that can be obtained are the field results associated with the interpolating functions. In order to calculate the field at a given point, we must know the edges that contribute to the field there. This can be done by finding which tetrahedron the point lies in, calculating the field contributed by each edge of that tetrahedron, and summing them together. With the ability to compute the field at any desired point, field plots can be generated.
 
+#### Calculating Fields
+The most direct results that can be obtained are the field results associated with the interpolating functions. In order to calculate the field at a given point, we must know the edges that contribute to the field there. This can be done by finding which tetrahedron the point lies in, calculating the field contributed by each edge of that tetrahedron, and summing them together. With the ability to compute the field at any desired point, field plots can be generated.
+#### Calculating S-Parameters
 The S-parameters of a problem with ports is often desirable. The equations/theory for generating this kind of result can be found on [Comsol's page](https://doc.comsol.com/5.5/doc/com.comsol.help.woptics/woptics_ug_modeling.5.24.html). The equation
 
 ![s21_equation](readme_refs/s21_equation.png)
@@ -82,7 +90,7 @@ There is currently an S-parameter implementation like that described above, thou
 Below are a couple of examples for how this software works.
 
 ### Simple Example
-We look at a simple example for using the software written below:
+We look at a simple example for using the software written below. The geometry is the same as the one used in the [mesh loading](#mesh-loading-and-data-structuring-using-coreform-cubit) section.
 ```python
 # Import matplotlib
 import matplotlib.pyplot as plt
