@@ -12,8 +12,8 @@ opn, opbn, opp = ["OutputPortVacuum", "OutputPortSubstrate"], "OutPortPEC", [1, 
 p1ip, p2ip = np.array([0, 0.0008]), np.array([0, 0])
 p1op, p2op = np.array([0, 0.0008]), np.array([0, 0])
 # Generate S21 results for a range of k0 (frequencies)
-num_freqs = 10
-microstrip = False
+num_freqs = 7
+microstrip = True
 if microstrip:
     freqs = np.linspace(1E6, 100E6, num_freqs)
     k0s = freqs * 2 * pi / c
@@ -69,6 +69,7 @@ if microstrip:
     plt.xticks([1] + [(i+1)*20 for i in range(5)])
     plt.ylim(350, 362)
     plt.legend(["FEM Code", "HFSS"])
+    plt.tight_layout()
     plt.savefig("microstrip_s21_phases.png")
     plt.close()
 
@@ -79,7 +80,7 @@ if microstrip:
     plt.ylabel("Mag(S21)")
     plt.xlim(-5, 105)
     plt.xticks([1] + [(i+1)*20 for i in range(5)])
-    plt.ylim(0.90, 1.02)
+    plt.ylim(0.80, 1.02)
     plt.tight_layout()
     plt.legend(["FEM Code", "HFSS"])
     plt.savefig("microstrip_s21_mag.png")
@@ -92,7 +93,7 @@ if microstrip:
     plt.ylabel("Mag(S11)")
     plt.xlim(-5, 105)
     plt.xticks([1] + [(i+1)*20 for i in range(5)])
-    plt.ylim(0, 0.05)
+    plt.ylim(0, 0.2)
     plt.tight_layout()
     plt.legend(["FEM Code", "HFSS"])
     plt.savefig("microstrip_s11_mag.png")
