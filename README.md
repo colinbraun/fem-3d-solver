@@ -134,12 +134,14 @@ waveguide.plot_fields(plane="xz", offset=y_length/2, phase=0)
 # matplotlib still works without interactive mode, but you will need to save the the results to view them
 plt.savefig("fields_plot_simple.png")
 ```
-The resulting image looks like:
+The resulting fields looks like:
 
 ![fields_plot_simple](readme_refs/fields_plot_simple.png)
 
 ### Advanced Example
-More complicated geometries require specifying more details. By no means is this implementation ideal, but it provides an idea about what kind of details you need to pay attention to. A microstrip line example is shown below:
+More complicated geometries require specifying more details. By no means is this implementation ideal, but it provides an idea about what kind of details you need to pay attention to. A microstrip line mesh and example is shown below:
+
+![microstrip_example_mesh](readme_refs/microstrip_example_mesh.png)
 
 ```python
 # Import matplotlib
@@ -186,7 +188,7 @@ waveguide.plot_fields(plane="xy", offset=z_length/2, phase=0)
 # matplotlib still works without interactive mode, but you will need to save the the results to view them
 plt.savefig("fields_plot_advanced.png")
 ```
-The resulting image looks like:
+The resulting fields looks like:
 
 ![fields_plot_advanced](readme_refs/fields_plot_advanced.png)
 
